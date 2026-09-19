@@ -1,0 +1,36 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+.codex/
+/app_secrets/
+/codex_auth/
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Frontend dependencies and generated Tailwind CSS
+node_modules/
+/static/style.css
+
+# Local database data and backups (keep db/init.sql tracked)
+/postgres_data/
+/backups/
+*.dump
+
+# Logs and editor/OS temporary files
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

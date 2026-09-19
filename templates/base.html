@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" class="scheme-dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>R19 Finder · Car part requests</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="bg-gray-950 text-gray-100 antialiased">
+  <header class="border-b border-gray-800 bg-gray-900">
+    <nav class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-5" aria-label="Navigation">
+      <a href="{{ url_for('index') }}" class="text-xl font-bold">R19 Finder</a>
+      <div class="flex items-center gap-4">
+        <a href="{{ url_for('cars.index') }}" class="text-sm text-gray-300 hover:text-white">Cars</a>
+        <a href="{{ url_for('websites') }}" class="text-sm text-gray-300 hover:text-white">Websites</a>
+        <a href="{{ url_for('ai.settings') }}" class="text-sm text-gray-300 hover:text-white">AI</a>
+        <a href="{{ url_for('new_request') }}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">New request</a>
+      </div>
+    </nav>
+  </header>
+  <main class="mx-auto max-w-5xl px-4 py-8">
+    {% for message in get_flashed_messages() %}<p role="status" class="mb-6 rounded-lg bg-green-950 p-4 text-green-300">{{ message }}</p>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+<script src="{{ url_for('static', filename='car-gallery.js') }}" defer></script>
+</body>
+</html>

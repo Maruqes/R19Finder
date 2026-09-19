@@ -1,0 +1,15 @@
+{% if car.photo_ids %}
+<div class="car-gallery" data-car-gallery aria-label="Photos of {{ car.name }}" aria-roledescription="carousel">
+  <div class="car-gallery-stage">
+    {% for photo_id in car.photo_ids %}<a href="{{ url_for('cars.photo', car_id=car.id, photo_id=photo_id) }}" target="_blank" rel="noopener" class="car-gallery-slide" {% if not loop.first %}hidden{% endif %}>
+      <img src="{{ url_for('cars.photo', car_id=car.id, photo_id=photo_id) }}" alt="{{ car.name }} — photo {{ loop.index }} of {{ car.photo_ids|length }}" loading="lazy">
+    </a>{% endfor %}
+  </div>
+  {% if car.photo_ids|length > 1 %}<div class="flex flex-wrap items-center justify-center gap-3 pt-3" data-gallery-controls hidden>
+    <button type="button" data-previous class="rounded border border-gray-700 px-3 py-1 text-blue-400" aria-label="Previous photo">←</button>
+    {% for photo_id in car.photo_ids %}<button type="button" data-slide="{{ loop.index0 }}" aria-label="Show photo {{ loop.index }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" class="gallery-dot">{{ loop.index }}</button>{% endfor %}
+    <button type="button" data-next class="rounded border border-gray-700 px-3 py-1 text-blue-400" aria-label="Next photo">→</button>
+    <button type="button" data-pause class="text-xs text-gray-400 underline">Pause slideshow</button>
+  </div>{% endif %}
+</div>
+{% endif %}

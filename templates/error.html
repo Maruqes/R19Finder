@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold">Unable to continue</h1>
+<p class="my-4 text-gray-400">{{ message }}</p>
+<a class="text-blue-400 underline" href="{{ url_for('index') }}">Back to requests</a>
+{% endblock %}

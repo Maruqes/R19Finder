@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="mb-8 space-y-4">
+  <div class="flex items-center justify-between gap-4"><h1 class="text-2xl font-bold">Your cars</h1><a href="{{ url_for('cars.edit') }}" class="text-sm text-blue-400 underline">Add car</a></div>
+  <div class="grid gap-4 sm:grid-cols-2">
+    {% for car in cars %}<article class="space-y-4 rounded-lg border border-gray-800 bg-gray-900 p-5">
+      {% include 'car_gallery.html' %}
+      <h2 class="break-words text-xl font-semibold"><a href="{{ url_for('cars.detail', car_id=car.id) }}" class="text-blue-400 hover:underline">{{ car.name }}</a></h2>
+      <p class="text-sm text-gray-400">{{ car.specs.make }} {{ car.specs.model }} · {{ car.specs.year or 'Year unknown' }}</p>
+      <div class="flex gap-4 text-sm text-blue-400"><a href="{{ url_for('cars.detail', car_id=car.id) }}" class="underline">View car</a><a href="{{ url_for('new_request', car_id=car.id) }}" class="underline">New part request</a></div>
+    </article>{% else %}<p class="text-sm text-gray-400">Add your first car to see its photos and create linked part requests.</p>{% endfor %}
+  </div>
+</section>
+<div class="mb-6">
+  <h2 class="text-2xl font-bold">Car part requests</h2>
+  <p class="mt-2 text-gray-400">{{ total }} request(s) saved. View a request or create a new one.</p>
+</div>
+<div class="space-y-3">
+  {% for order in orders %}
+  <a href="{{ url_for('detail', order_id=order.id) }}" class="flex items-start gap-4 rounded-lg border border-gray-800 bg-gray-900 p-4 hover:border-blue-400">
+    {% if order.cover_id %}<img class="h-20 w-20 shrink-0 rounded object-cover" src="{{ url_for('photo', photo_id=order.cover_id) }}" alt="Photo of the part" loading="lazy">{% endif %}
+    <div class="min-w-0">
+      <h2 class="break-words font-semibold">{{ order.vehicle or 'Unidentified part' }}</h2>
+      <p class="mt-1 break-words text-sm text-gray-300">{{ order.description|truncate(180) }}</p>
+      <p class="mt-2 text-xs text-gray-400">{{ order.created_at.strftime('%d/%m/%Y') }} · {{ order.photo_count }} photo(s)</p>
+    </div>
+  </a>
+  {% else %}
+  <div class="rounded-lg border border-gray-800 bg-gray-900 p-8 text-center">
+    <p class="text-gray-400">No requests yet.</p>
+    <a class="mt-3 inline-block font-medium text-blue-400 underline" href="{{ url_for('new_request') }}">Create the first request</a>
+  </div>
+  {% endfor %}
+</div>
+<nav class="mt-6 flex gap-6 text-sm text-blue-400" aria-label="Pagination">
+  {% if page > 1 %}<a href="{{ url_for('index', page=page-1) }}">← Previous</a>{% endif %}
+  {% if page * 12 < total %}<a href="{{ url_for('index', page=page+1) }}">Next →</a>{% endif %}
+</nav>
+{% endblock %}

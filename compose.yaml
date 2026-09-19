@@ -1,0 +1,54 @@
+services:
+  web:
+    build: .
+    network_mode: host
+    environment:
+      DATABASE_URL: postgresql://r19finder:${POSTGRES_PASSWORD:-local-development-password}@127.0.0.1:${POSTGRES_PORT:-5433}/r19finder
+      SECRET_KEY: ${SECRET_KEY:-local-development-change-before-deploying}
+      PORT: ${PORT:-8000}
+    volumes:
+      - codex_auth:/home/app/.codex
+      - app_secrets:/home/app/.local/share/r19finder
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['PORT'] + '/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+  worker:
+    extends:
+      service: web
+    command: ["python", "worker.py"]
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+  scheduler:
+    extends:
+      service: worker
+    command: ["python", "scheduler.py"]
+  db:
+    image: postgres:17-alpine
+    network_mode: host
+    command: ["postgres", "-c", "listen_addresses=127.0.0.1", "-p", "${POSTGRES_PORT:-5433}"]
+    environment:
+      POSTGRES_DB: r19finder
+      POSTGRES_USER: r19finder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro,Z
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "${POSTGRES_PORT:-5433}", "-U", "r19finder", "-d", "r19finder"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  codex_auth:
+  app_secrets:

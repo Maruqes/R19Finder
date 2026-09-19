@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mx-auto max-w-3xl">
+  <a href="{{ url_for('cars.index') }}" class="text-sm text-blue-400 hover:underline">← Cars</a>
+  <h1 class="mb-5 mt-4 text-2xl font-bold">{{ 'Edit car' if car else 'Add car' }}</h1>
+  <form method="post" enctype="multipart/form-data" class="space-y-6 rounded-lg border border-gray-800 bg-gray-900 p-6">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    {% if error %}<p role="alert" class="text-sm text-red-300">{{ error }} Select any new photo again.</p>{% endif %}
+    <p class="text-sm text-gray-400">Only profile name, make and model are required. Leave uncertain details blank. Specifications and notes are sent to the selected AI when you search for parts.</p>
+    <div><label for="name" class="mb-2 block text-sm font-medium">Profile name</label><input id="name" name="name" required maxlength="120" value="{{ values.get('name', '') }}" placeholder="My Renault 19 Chamade" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm"></div>
+    <div class="space-y-3">
+      <label for="photos" class="block text-sm font-medium">Car photos (optional)</label>
+      {% if car and car.photo_ids %}<div class="grid grid-cols-2 gap-3">
+      {% for photo_id in car.photo_ids %}<label class="rounded-lg border border-gray-700 p-2 text-sm">
+        <div class="car-photo-frame"><img src="{{ url_for('cars.photo', car_id=car.id, photo_id=photo_id) }}" alt="Current photo {{ loop.index }} of {{ car.name }}" class="car-photo car-photo-compact"></div>
+        <input type="checkbox" name="remove_photos" value="{{ photo_id }}" {% if photo_id|string in request.form.getlist('remove_photos') %}checked{% endif %}> Remove photo {{ loop.index }}
+      </label>{% endfor %}</div>{% endif %}
+      <input id="photos" name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp" class="block w-full text-sm text-gray-400">
+      <p class="text-xs text-gray-400">Up to 6 photos, 5 MB each. JPG, PNG or WebP. New uploads are added; existing photos stay unless selected for removal. Profile photos are not sent to the AI.</p>
+    </div>
+    <fieldset><legend class="mb-4 font-semibold">Vehicle specifications</legend>
+      <div class="grid gap-4 sm:grid-cols-2">
+        {% for key, label, placeholder in fields %}<div>
+          <label for="{{ key }}" class="mb-2 block text-sm font-medium">{{ label }}</label>
+          {% if key == 'abs' %}<select id="abs" name="abs" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+            {% for value, text in [('', 'Unknown'), ('Yes', 'Yes'), ('No', 'No')] %}<option value="{{ value }}" {% if values.get('abs', '') == value %}selected{% endif %}>{{ text }}</option>{% endfor %}
+          </select>{% else %}<input id="{{ key }}" name="{{ key }}" {% if key in ['make', 'model'] %}required{% endif %} {% if key == 'year' %}inputmode="numeric" pattern="[0-9]{4}"{% endif %} maxlength="120" value="{{ values.get(key, '') }}" placeholder="{{ placeholder }}" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">{% endif %}
+        </div>{% endfor %}
+      </div>
+    </fieldset>
+    <div><label for="notes" class="mb-2 block text-sm font-medium">Other characteristics, modifications and known references</label><textarea id="notes" name="notes" maxlength="3000" rows="4" placeholder="E.g. original rear drum brakes, axle markings, measured mounting distances, modifications…" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">{{ values.get('notes', '') }}</textarea><p class="mt-2 text-xs text-gray-400">Do not include personal information. Changes affect future searches, including automations; past search snapshots stay unchanged.</p></div>
+    <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Save car</button>
+  </form>
+</div>
+{% endblock %}

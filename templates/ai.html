@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mx-auto max-w-2xl space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold">AI connections</h1>
+    <p class="mt-2 text-sm text-gray-400">Configure and test Codex CLI and Open WebUI. Tests do not send requests or photos.</p>
+  </div>
+  {% if error %}<p role="alert" class="rounded-lg bg-red-950 p-4 text-sm text-red-300">{{ error }}</p>{% endif %}
+  {% for provider, title in [('codex', 'Codex CLI'), ('openwebui', 'Open WebUI')] %}
+  {% set connection = connections[provider] %}
+  <section class="space-y-4 rounded-lg border border-gray-800 bg-gray-900 p-6">
+    <h2 class="text-lg font-semibold">{{ title }}</h2>
+    {% if connection.checked_at %}
+    <div role="status" class="rounded-md p-3 text-sm {{ 'bg-green-950 text-green-300' if connection.status == 'ok' else 'bg-red-950 text-red-300' }}">
+      <p>{{ connection.message }}</p>
+      <p class="mt-1 text-xs">Last checked: {{ connection.checked_at.strftime('%d/%m/%Y %H:%M') }} UTC</p>
+    </div>
+    {% else %}<p class="text-sm text-gray-400">Not tested yet.</p>{% endif %}
+    {% if provider == 'codex' %}
+    <p class="text-sm text-gray-300">To connect your account, run this command in the project terminal and follow the displayed link and code:</p>
+    <pre class="overflow-x-auto rounded bg-gray-950 p-3 text-sm">make codex-login</pre>
+    <p class="text-xs text-gray-400">Then check authentication below. Your session persists across restarts. This local check does not confirm model access.</p>
+    {% else %}
+    <form action="{{ url_for('ai.save_openwebui') }}" method="post" class="space-y-4">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div>
+        <label for="base_url" class="mb-2 block text-sm font-medium">Open WebUI URL</label>
+        <input id="base_url" name="base_url" type="url" required maxlength="2048" value="{{ submitted_url if submitted_url is not none else connection.base_url }}" placeholder="http://localhost:3000" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+        <p class="mt-2 text-xs text-gray-400">Base URL, without /api/models. With host networking, use localhost for an instance running on this computer.</p>
+      </div>
+      <div>
+        <label for="api_key" class="mb-2 block text-sm font-medium">API key</label>
+        <input id="api_key" name="api_key" type="password" autocomplete="new-password" maxlength="4096" {% if not connection.has_key %}required{% endif %} placeholder="{{ 'Leave blank to keep the saved key' if connection.has_key else 'Open WebUI API key' }}" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+        <p class="mt-2 text-xs text-gray-400">{% if connection.has_key %}Key saved. {% endif %}Find your key in Settings → Account in Open WebUI. An administrator must enable API keys.</p>
+      </div>
+      <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Save settings</button>
+    </form>
+    {% endif %}
+    <form action="{{ url_for('ai.test_connection', provider=provider) }}" method="post">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button type="submit" class="rounded-lg border border-gray-600 px-4 py-2 text-sm font-medium hover:bg-gray-800">{{ 'Check authentication' if provider == 'codex' else 'Test saved connection' }}</button>
+    </form>
+    {% if provider == 'openwebui' and models is not none %}
+    <details class="text-sm text-gray-300"><summary class="cursor-pointer">Available models ({{ models|length }})</summary>
+      <ul class="mt-2 space-y-1 break-words">{% for model in models %}<li>{{ model }}</li>{% else %}<li>No models are available for this account.</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

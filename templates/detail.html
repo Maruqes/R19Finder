@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+{% block content %}
+<a href="{{ url_for('index') }}" class="text-sm text-blue-400 hover:underline">← Back to requests</a>
+<article class="mt-4 rounded-lg border border-gray-800 bg-gray-900 p-6">
+  <h1 class="break-words text-2xl font-bold">{{ order.vehicle or 'Unidentified part' }}</h1>
+  {% if car %}<p class="mt-2 text-sm text-gray-400">Car profile: <a href="{{ url_for('cars.detail', car_id=car.id) }}" class="text-blue-400 underline">{{ car.name }}</a> · Technical specifications included in new searches.</p>{% endif %}
+  <a href="{{ url_for('edit_request', order_id=order.id) }}" class="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Edit request</a>
+  <p class="mt-2 text-sm text-gray-400">{{ order.created_at.strftime('%d/%m/%Y at %H:%M') }} UTC · #{{ (order.id|string)[:8] }}</p>
+  <h2 class="mb-2 mt-6 font-semibold">Description</h2>
+  <p class="whitespace-pre-wrap break-words text-gray-300">{{ order.description }}</p>
+  <h2 class="mb-3 mt-6 font-semibold">Photos</h2>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+    {% for photo in photos %}<a href="{{ url_for('photo', photo_id=photo.id) }}" target="_blank" rel="noopener"><img class="h-56 w-full rounded-lg bg-gray-950 object-contain" src="{{ url_for('photo', photo_id=photo.id) }}" alt="Photo {{ loop.index }} of the part" loading="lazy"></a>{% else %}<p class="text-sm text-gray-400">No photos.</p>{% endfor %}
+  </div>
+</article>
+<section id="research" class="mt-6 space-y-5 rounded-lg border border-gray-800 bg-gray-900 p-6">
+  <div>
+    <h2 class="text-xl font-bold">Find this part with AI</h2>
+    <p class="mt-2 text-sm text-gray-400">Search the web using this request's vehicle, description and {{ photos|length }} photo(s).</p>
+    <p class="mt-2 text-sm text-gray-400">Checks <a href="{{ url_for('websites') }}" class="text-blue-400 underline">priority websites</a> first, then the rest of the web.</p>
+  </div>
+  <form action="{{ url_for('research.refresh_models', order_id=order.id) }}" method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <button type="submit" class="text-sm text-blue-400 hover:underline">Refresh Open WebUI models</button>
+    <a href="{{ url_for('ai.settings') }}" class="ml-4 text-sm text-gray-400 hover:underline">Connection settings</a>
+  </form>
+  <form action="{{ url_for('research.start', order_id=order.id) }}" method="post" class="space-y-4">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <div>
+      <label for="model" class="mb-2 block text-sm font-medium">AI provider and model</label>
+      <select id="model" name="model" required class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+        <option value="codex">Codex CLI</option>
+        {% if models %}<optgroup label="Open WebUI">{% for model in models %}<option value="openwebui:{{ model }}">{{ model }}</option>{% endfor %}</optgroup>{% endif %}
+      </select>
+      <p class="mt-2 text-xs text-gray-400">For photos, choose an Open WebUI model with vision and tool calling support. Web search must be configured in Open WebUI.</p>
+    </div>
+    <div>
+      <label for="codex_model" class="mb-2 block text-sm font-medium">Codex model</label>
+      <select id="codex_model" name="codex_model" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+        <option value="">Default model</option>
+        {% for model in codex_models %}<option value="{{ model }}" data-efforts='{{ codex_models[model]|tojson }}'>{{ model }}</option>{% endfor %}
+      </select>
+      <p class="mt-2 text-xs text-gray-400">Models from the local Codex catalogue. Ignored when Open WebUI is selected.</p>
+      {% if not codex_models %}<p class="mt-2 text-xs text-gray-400">No cached models yet. Run a search with the default model, then reload this page.</p>{% endif %}
+      <label for="reasoning_effort" class="mb-2 mt-4 block text-sm font-medium">Reasoning effort</label>
+      <select id="reasoning_effort" name="reasoning_effort" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+        <option value="">Model default</option>
+      </select>
+      <p class="mt-2 text-xs text-gray-400">Choose a specific model to see supported levels. Higher effort may take longer and use more credits.</p>
+    </div>
+    <div>
+      <label for="preferred_options" class="mb-2 block text-sm font-medium">Preferred number of options</label>
+      <input id="preferred_options" name="preferred_options" type="number" min="1" max="20" step="1" value="6" required class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+      <p class="mt-2 text-xs text-gray-400">Aim for 1–20 distinct listings. Fewer are fine if suitable parts cannot be found. More options may take longer.</p>
+    </div>
+    <div>
+      <label for="preferred_price" class="mb-2 block text-sm font-medium">Preferred price (optional)</label>
+      <input id="preferred_price" name="preferred_price" maxlength="80" placeholder="E.g. €150" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+      <p class="mt-2 text-xs text-gray-400">A preference, not a price cap. More expensive options are welcome if needed. Include the currency.</p>
+    </div>
+    <fieldset class="space-y-4">
+      <legend class="text-sm font-medium">Pickup or shipping (optional — you can use both)</legend>
+      <div>
+        <label for="pickup_areas" class="mb-2 block text-sm font-medium">In-person pickup areas</label>
+        <input id="pickup_areas" name="pickup_areas" maxlength="500" placeholder="E.g. Northern Portugal / Galicia" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+      </div>
+      <div>
+        <label for="shipping_areas" class="mb-2 block text-sm font-medium">Seller countries or regions for shipping</label>
+        <input id="shipping_areas" name="shipping_areas" maxlength="500" placeholder="E.g. Europe" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
+        <p class="mt-2 text-xs text-gray-400">Leave an area empty for no preference. Add the delivery destination in Additional instructions to check shipping.</p>
+      </div>
+    </fieldset>
+    <div>
+      <label for="instructions" class="mb-2 block text-sm font-medium">Additional instructions (optional)</label>
+      <textarea id="instructions" name="instructions" maxlength="4000" rows="3" placeholder="E.g. Look for used parts in Portugal or Spain, under €150, with shipping to Lisbon." class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm"></textarea>
+    </div>
+    <p class="text-xs text-gray-400">Starting a search sends the current request and photos to the selected provider and may use account credits. Results are saved here. No purchases or seller messages are made.</p>
+    <button id="start-search" type="submit" {% if active_search %}disabled{% endif %} class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">{{ 'Search in progress' if active_search else 'Search for this part' }}</button>
+    <details class="rounded-lg border border-gray-700 p-4">
+      <summary class="cursor-pointer font-semibold">Schedule this search weekly</summary>
+      <p class="my-3 text-sm text-gray-400">Select days and times in Europe/Lisbon (automatic daylight saving). Saves the provider, model and preferences above, including priority websites. Each run uses the current request text and photos.</p>
+      <div class="space-y-2">
+        {% for day in weekdays %}<div class="flex items-center justify-between gap-4">
+          <label class="text-sm"><input type="checkbox" name="weekdays" value="{{ loop.index0 }}" class="mr-2">{{ day }}</label>
+          <label class="text-sm"><span class="sr-only">{{ day }} time</span><input type="time" name="time_{{ loop.index0 }}" value="16:30" class="rounded-md border border-gray-700 bg-gray-950 p-2"></label>
+        </div>{% endfor %}
+      </div>
+      <p class="my-3 text-xs text-gray-400">Runs automatically and may use account credits. Keep Docker and the computer running. Saving the same day/time updates its settings; it does not start a search now.</p>
+      <button type="submit" name="action" value="schedule" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Save weekly schedule</button>
+    </details>
+  </form>
+</section>
+<section id="schedules" class="mt-6 space-y-4">
+  <h2 class="text-xl font-bold">Weekly automations</h2>
+  {% for schedule in schedules %}
+  <article class="space-y-3 rounded-lg border border-gray-800 bg-gray-900 p-4">
+    <h3 class="font-semibold">{{ weekdays[schedule.weekday] }} · {{ schedule.local_time.strftime('%H:%M') }} · {{ 'Enabled' if schedule.enabled else 'Disabled' }}</h3>
+    <p class="break-words text-sm text-gray-300">{{ schedule.settings.provider }} · {{ schedule.settings.model or 'Default model' }} · {{ schedule.settings.reasoning_effort or 'Default effort' }} · {{ schedule.settings.preferred_options }} preferred options</p>
+    {% if schedule.enabled %}<p class="text-xs text-gray-400">Next: {{ schedule.next_run.astimezone(lisbon).strftime('%d/%m/%Y %H:%M') }} Europe/Lisbon</p>{% endif %}
+    {% if schedule.last_message %}<p class="text-xs text-gray-400">{{ schedule.last_message }}</p>{% endif %}
+    <details class="text-sm text-gray-400"><summary class="cursor-pointer">Saved preferences</summary>
+      <p class="whitespace-pre-wrap break-words">Instructions: {{ schedule.settings.instructions or 'None' }}</p>
+      <p>Preferred price: {{ schedule.settings.preferred_price or 'Any' }}</p>
+      <p>Pickup: {{ schedule.settings.pickup_areas or 'No preference' }}</p>
+      <p>Shipping: {{ schedule.settings.shipping_areas or 'No preference' }}</p>
+      <p class="break-words">Priority websites: {{ schedule.settings.priority_websites|join(', ') or 'None' }}</p>
+    </details>
+    <form action="{{ url_for('research.manage_schedule', order_id=order.id, schedule_id=schedule.id) }}" method="post" class="flex gap-4">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button name="action" value="{{ 'disable' if schedule.enabled else 'enable' }}" class="text-sm text-blue-400 underline">{{ 'Disable' if schedule.enabled else 'Enable' }}</button>
+      <button name="action" value="delete" class="text-sm text-red-300 underline">Delete schedule</button>
+    </form>
+  </article>
+  {% else %}<p class="text-sm text-gray-400">No schedules yet. Configure a search above and open Schedule this search weekly.</p>{% endfor %}
+</section>
+{% include 'parts_found.html' %}
+<p id="history-update-status" role="status" class="mt-4 text-xs text-gray-400"></p>
+<section id="search-history" data-active="{{ 'true' if active_search else 'false' }}" class="mt-8 space-y-4">
+  <div class="flex items-center justify-between gap-3"><h2 class="text-xl font-bold">Search history</h2><form action="{{ url_for('detail', order_id=order.id, _anchor='research') }}" method="get"><button type="submit" class="text-sm text-blue-400 hover:underline">Refresh status</button></form></div>
+  {% for search in searches %}
+  <article data-search-id="{{ search.id }}" class="space-y-3 rounded-lg border border-gray-800 bg-gray-900 p-6">
+    <h3 class="break-words font-semibold">{{ 'Codex CLI · ' ~ (search.model or 'Default model') if search.provider == 'codex' else 'Open WebUI · ' ~ search.model }}</h3>
+    <p class="text-xs text-gray-400">{{ search.created_at.strftime('%d/%m/%Y %H:%M') }} UTC · {{ search.status|capitalize }}</p>
+    {% if search.schedule_id %}<p class="text-xs text-blue-300">Automatic weekly search</p>{% endif %}
+    {% if search.provider == 'codex' %}<p class="text-xs text-gray-400">Reasoning effort: {{ search.reasoning_effort|capitalize if search.reasoning_effort else 'Model default' }}</p>{% endif %}
+    {% if search.instructions %}<p class="whitespace-pre-wrap break-words text-sm text-gray-300">Instructions: {{ search.instructions }}</p>{% endif %}
+    <p class="text-sm text-gray-300">Preferred options: {{ search.preferred_options }} (soft target){% if search.status == 'completed' and search.listings %} · {{ search.listings|length }} returned{% endif %}</p>
+    {% if search.priority_websites %}<details class="text-sm text-gray-400"><summary class="cursor-pointer">Priority websites used for this search</summary><ol class="mt-2 list-decimal space-y-1 pl-5">{% for website in search.priority_websites %}<li><a href="{{ website }}" target="_blank" rel="noopener noreferrer" class="break-all text-blue-400 underline">{{ website }}</a></li>{% endfor %}</ol></details>{% endif %}
+    {% if search.preferred_price %}<p class="break-words text-sm text-gray-300">Preferred price (not a cap): {{ search.preferred_price }}</p>{% endif %}
+    {% if search.pickup_areas %}<p class="break-words text-sm text-gray-300">In-person pickup: {{ search.pickup_areas }}</p>{% endif %}
+    {% if search.shipping_areas %}<p class="break-words text-sm text-gray-300">Shipping from: {{ search.shipping_areas }}</p>{% endif %}
+    {% if search.status in ['queued', 'running'] %}<p role="status" class="text-sm text-blue-300">{{ 'Waiting for the research worker.' if search.status == 'queued' else 'Researching the part. This can take several minutes.' }} Use Refresh status to check progress.</p>{% endif %}
+    {% if search.status == 'failed' %}<p role="alert" class="text-sm text-red-300">{{ search.error }}</p>{% endif %}
+    {% if search.status == 'completed' %}
+      <p class="text-xs text-gray-400">{{ 'Web search activity or sources were returned by the provider.' if search.web_search_observed else 'The provider did not return evidence of web search. Treat these suggestions as unverified.' }}</p>
+      <div class="markdown-body text-sm text-gray-200">{{ search.result|markdown }}</div>
+      {% if search.listings %}
+      <h4 class="text-lg font-semibold">Parts found</h4>
+      <p class="text-xs text-gray-400">Details reported by the AI, not independently verified. Confirm price, availability, delivery and compatibility with the seller. Photos load from external websites.</p>
+      <div class="space-y-4">
+        {% for listing in search.listings %}
+        <article class="grid gap-4 rounded-lg border border-gray-700 bg-gray-950 p-4 sm:grid-cols-[160px_1fr]">
+          <div class="listing-photo rounded-md bg-gray-900">
+            <p class="p-4 text-center text-xs text-gray-400">Photo unavailable</p>
+            {% if listing.image_url %}<img src="{{ listing.image_url }}" alt="Seller photo: {{ listing.title }}" loading="lazy" referrerpolicy="no-referrer" class="h-40 w-full rounded-md object-contain">{% endif %}
+          </div>
+          <div class="min-w-0 space-y-3">
+            <h5 class="break-words font-semibold"><a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer" class="text-blue-400 underline">{{ listing.title or 'View listing' }}</a></h5>
+            <p class="text-xl font-bold">{{ listing.price or 'Price not confirmed' }}</p>
+            <p class="text-sm text-gray-300"><strong>Availability:</strong> {{ 'Listed as available at search time (AI-reported)' if listing.availability == 'listed_available' else 'Not confirmed' }}</p>
+            {% if listing.availability_evidence %}<p class="break-words text-xs text-gray-400">{{ listing.availability_evidence }}</p>{% endif %}
+            <p class="break-words text-sm text-gray-300">{{ listing.description }}</p>
+            <dl class="grid gap-2 text-sm sm:grid-cols-2">
+              {% for label, value in [('Seller', listing.seller), ('Location', listing.location), ('Condition', listing.condition), ('Shipping cost', listing.shipping_cost)] %}
+              <div><dt class="text-xs text-gray-400">{{ label }}</dt><dd class="break-words">{{ value or 'Not confirmed' }}</dd></div>
+              {% endfor %}
+              <div><dt class="text-xs text-gray-400">In-person pickup</dt><dd>{{ {'available':'Available', 'unavailable':'Unavailable', 'unknown':'Not confirmed'}[listing.pickup] }}</dd></div>
+              <div><dt class="text-xs text-gray-400">Remote / shipping</dt><dd>{{ {'available':'Available', 'unavailable':'Unavailable', 'unknown':'Not confirmed'}[listing.shipping] }}</dd></div>
+            </dl>
+            <p class="break-words text-sm text-gray-300"><strong>Compatibility:</strong> {{ listing.compatibility or 'Not confirmed — check references and fitment.' }}</p>
+            <p class="text-sm text-gray-300"><strong>Photo comparison (AI-reported):</strong> {{ {'compared':'Photos compared — fitment still needs confirmation', 'inconclusive':'Inconclusive', 'not_checked':'Not checked'}.get(listing.visual_status, 'Not checked') }}</p>
+            {% if listing.visual_comparison %}<p class="break-words text-sm text-gray-300">{{ listing.visual_comparison }}</p>{% endif %}
+            <p class="break-words text-sm text-gray-300"><strong>Version checks:</strong> {{ listing.variant_checks or 'Not confirmed — verify the exact vehicle version and part reference.' }}</p>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% if search.sources %}<h4 class="font-medium">Sources</h4><ol class="list-decimal space-y-2 pl-5 text-sm">{% for source in search.sources %}<li><a href="{{ source }}" target="_blank" rel="noopener noreferrer" class="break-all text-blue-400 underline">{{ source }}</a></li>{% endfor %}</ol>{% endif %}
+    {% endif %}
+    {% if search.remote_url %}<a href="{{ search.remote_url }}" target="_blank" rel="noopener noreferrer" class="inline-block text-sm text-blue-400 underline">Open conversation in Open WebUI</a>{% endif %}
+    <details class="text-xs text-gray-400"><summary class="cursor-pointer">Request details used for this search</summary><p class="mt-2 break-words">{{ search.vehicle }}</p><p class="whitespace-pre-wrap break-words">{{ search.description }}</p>
+      {% if search.car_profile %}<h4 class="mt-3 font-semibold">Car profile snapshot</h4><dl class="mt-2 space-y-1">{% for key, value in search.car_profile.items() %}{% if value %}<div><dt class="font-medium">{{ key|replace('_', ' ')|capitalize }}</dt><dd class="whitespace-pre-wrap break-words">{{ value }}</dd></div>{% endif %}{% endfor %}</dl>{% endif %}
+    </details>
+  </article>
+  {% else %}<p class="text-sm text-gray-400">No searches yet. Choose a model and start your first search above.</p>{% endfor %}
+</section>
+<script src="{{ url_for('static', filename='research.js') }}" defer></script>
+{% endblock %}
