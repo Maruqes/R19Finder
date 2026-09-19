@@ -80,8 +80,6 @@ def create_cars_blueprint(connect, validate_csrf, normalize_photo):
                         uploads = [upload for upload in request.files.getlist('photos') + request.files.getlist('photo') if upload.filename]
                         if not removed.issubset({str(photo_id) for photo_id in existing}):
                             raise ValueError('One of the photos does not belong to this car. Refresh the page.')
-                        if len(remaining) + len(uploads) > 6:
-                            raise ValueError('A car can have up to 6 photos. Remove some before adding more.')
                         photo_data = [normalize_photo(upload) for upload in uploads]
                     except ValueError as invalid_photo:
                         error = str(invalid_photo)

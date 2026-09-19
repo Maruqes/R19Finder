@@ -93,16 +93,26 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(validate_url('http://openwebui:8080/'), 'http://openwebui:8080')
 
     def test_codex_does_not_expose_output_or_generate(self):
-        with patch('ai.subprocess.run', return_value=subprocess.CompletedProcess([], 0, 'private-token', 'private-email')) as run:
+        with patch('ai.subprocess.run', return_value=subprocess.CompletedProcess([], 0, 'private-token', 'private-email')) as run, \
+                patch('ai.refresh_codex_models', return_value={'catalogue-model': ['low', 'high']}):
             result = self.client.post('/ai/codex/test', data={'csrf': self.csrf})
         self.assertNotIn(b'private-token', result.data)
         self.assertNotIn(b'private-email', result.data)
         self.assertEqual(run.call_args.args[0][-2:], ['login', 'status'])
+        self.assertIn(b'catalogue-model', result.data)
+        self.assertIn(b'catalogue-model', self.client.get('/ai').data)
+        self.assertEqual(self.conn.execute("SELECT models FROM ai_connections WHERE provider='codex'").fetchone()['models'], ['catalogue-model'])
         for failure in [FileNotFoundError(), subprocess.TimeoutExpired('codex', 10)]:
             with patch('ai.subprocess.run', side_effect=failure), self.assertRaises(ValueError):
                 check_codex()
         with patch('ai.subprocess.run', return_value=subprocess.CompletedProcess([], 1)), self.assertRaises(ValueError):
             check_codex()
+
+    def test_codex_model_discovery_failure_is_visible(self):
+        with patch('ai.check_codex'), patch('ai.refresh_codex_models', side_effect=ValueError('Codex model discovery timed out. Try again.')):
+            result = self.client.post('/ai/codex/test', data={'csrf': self.csrf})
+        self.assertIn(b'Codex model discovery timed out.', result.data)
+        self.assertEqual(self.conn.execute("SELECT status FROM ai_connections WHERE provider='codex'").fetchone()['status'], 'error')
 
     def test_missing_and_corrupted_key(self):
         with patch('ai.httpx.get') as get:

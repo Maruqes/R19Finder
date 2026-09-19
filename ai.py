@@ -3,12 +3,14 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import time
 from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet, InvalidToken
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 import httpx
 from psycopg.types.json import Jsonb
+from codex_catalogue import list_models
 
 SECRET_FILE = Path('/home/app/.local/share/r19finder/encryption.key')
 
@@ -78,17 +80,38 @@ def check_openwebui(connection):
         raise ValueError('Open WebUI returned an invalid response.') from None
 
 
+_codex_catalogue = {}
+_codex_checked_at = float('-inf')
+
+
+def refresh_codex_models():
+    global _codex_catalogue, _codex_checked_at
+    _codex_catalogue = list_models()
+    _codex_checked_at = time.monotonic()
+    return _codex_catalogue
+
+
 def cached_codex_models():
     """Read only the public model catalogue, never the CLI credentials."""
+    global _codex_catalogue, _codex_checked_at
+    if time.monotonic() - _codex_checked_at < 60:
+        return _codex_catalogue
+    try:
+        return refresh_codex_models()
+    except ValueError:
+        _codex_checked_at = time.monotonic()
+    if _codex_catalogue:
+        return _codex_catalogue
     try:
         payload = json.loads(Path('/home/app/.codex/models_cache.json').read_text())
-        return {
+        _codex_catalogue = {
             model['slug']: [level['effort'] for level in model.get('supported_reasoning_levels', [])
                             if isinstance(level, dict) and level.get('effort') in
                             {'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'}]
             for model in payload['models']
             if isinstance(model, dict) and model.get('visibility') == 'list'
             and isinstance(model.get('slug'), str) and model['slug']}
+        return _codex_catalogue
     except (OSError, ValueError, KeyError, TypeError):
         return {}
 
@@ -158,7 +181,9 @@ def create_ai_blueprint(connect, validate_csrf):
         models = None
         try:
             if provider == 'codex':
-                message = check_codex()
+                check_codex()
+                models = list(refresh_codex_models())
+                message = f'Local authentication found. {len(models)} model(s) listed by Codex. No response was generated.'
             else:
                 models = check_openwebui(connection)
                 message = f'Connection confirmed. {len(models)} model(s) available. No response was generated.'

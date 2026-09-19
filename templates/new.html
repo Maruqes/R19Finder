@@ -1,49 +1,24 @@
 {% extends 'base.html' %}
+{% from 'components/ui.html' import icon, heading %}
+{% block title %}{{ 'Edit request' if order else 'New request' }}{% endblock %}
 {% block content %}
-<div class="mx-auto max-w-xl">
-  <a href="{{ url_for('index') }}" class="text-sm text-blue-400 hover:underline">← Back to requests</a>
-  <h1 class="mb-6 mt-4 text-2xl font-bold">{{ 'Edit request' if order else 'New request' }}</h1>
-  <form action="{{ url_for('edit_request', order_id=order.id) if order else url_for('create_request') }}" method="post" enctype="multipart/form-data" class="space-y-5 rounded-lg border border-gray-800 bg-gray-900 p-6">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    {% if error %}<p role="alert" class="rounded bg-red-950 p-3 text-sm text-red-300">{{ error }} Select the photos again.</p>{% endif %}
-    <div>
-      <label for="car_id" class="mb-2 block text-sm font-medium">Car profile</label>
-      <select id="car_id" name="car_id" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
-        <option value="">No profile — enter a vehicle below</option>
-        {% for car in cars %}<option value="{{ car.id }}" {% if car.id|string == selected_car_id %}selected{% endif %}>{{ car.name }}</option>{% endfor %}
-      </select>
-      <p class="mt-2 text-xs text-gray-400">The profile's technical details are included in AI searches. <a href="{{ url_for('cars.edit') }}" class="text-blue-400 underline">Add a car first</a>.</p>
-    </div>
-    <div>
-      <label for="vehicle" class="mb-2 block text-sm font-medium">Vehicle name (only when no car profile is selected)</label>
-      <input id="vehicle" name="vehicle" maxlength="120" value="{{ vehicle|default('') }}" placeholder="E.g. Renault 19, 1994" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
-    </div>
-    <div>
-      <label for="description" class="mb-2 block text-sm font-medium">Part description</label>
-      <textarea id="description" name="description" required minlength="10" maxlength="5000" rows="6" placeholder="Describe the part you need…" aria-describedby="description-help" class="w-full rounded-md border border-gray-700 p-3 text-sm">{{ description|default('') }}</textarea>
-      <p id="description-help" class="mt-1 text-xs text-gray-400">Between 10 and 5000 characters.</p>
-    </div>
-    {% if photos %}
-    <fieldset>
-      <legend class="mb-2 text-sm font-medium">Current photos</legend>
-      <p class="mb-3 text-xs text-gray-400">Existing photos are kept. Select only the photos to remove when saving.</p>
-      <div class="grid grid-cols-2 gap-3">
-        {% for photo in photos %}
-        <label class="rounded-md border border-gray-700 p-2 text-sm">
-          <img src="{{ url_for('photo', photo_id=photo.id) }}" alt="Photo {{ loop.index }}" class="mb-2 h-28 w-full rounded object-contain">
-          <input type="checkbox" name="remove_photos" value="{{ photo.id }}" {% if photo.id|string in removed|default([]) %}checked{% endif %}> Remove photo {{ loop.index }}
-        </label>
-        {% endfor %}
-      </div>
-    </fieldset>
-    {% endif %}
-    <div>
-      <label for="photos" class="mb-2 block text-sm font-medium">{{ 'Add photos (optional)' if order else 'Photos (optional)' }}</label>
-      <input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="photos-help" class="block w-full text-sm text-gray-400 file:mr-3 file:rounded-md file:border-0 file:bg-gray-800 file:px-3 file:py-2 file:text-gray-100">
-      <p id="photos-help" class="mt-2 text-xs text-gray-400">Up to 6 photos in total, 5 MB per photo. JPG, PNG or WebP.</p>
-    </div>
-    <button class="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white hover:bg-blue-700" type="submit">{{ 'Save changes' if order else 'Save request' }}</button>
-    {% if order %}<a href="{{ url_for('detail', order_id=order.id) }}" class="block text-center text-sm text-gray-400 hover:underline">Cancel</a>{% endif %}
-  </form>
+<a href="{{ url_for('detail', order_id=order.id) if order else url_for('index') }}" class="breadcrumb">{{ icon('back', 16) }}{{ 'Back to request' if order else 'Back to requests' }}</a>
+{{ heading('', 'Edit request' if order else 'New request') }}
+<div class="form-layout">
+<form action="{{ url_for('edit_request', order_id=order.id) if order else url_for('create_request') }}" method="post" enctype="multipart/form-data" class="panel" data-submit-state>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  {% if error %}<p role="alert" tabindex="-1" class="mb-5 rounded-lg bg-red-950 p-4 text-sm text-red-300">{{ error }} Select the photos again.</p>{% endif %}
+  <section class="form-section"><h2 class="form-section-title">Vehicle</h2>
+    <div class="field"><label for="car_id">Car profile <span class="text-gray-400">· optional</span></label><select id="car_id" name="car_id"><option value="">Enter vehicle details manually</option>{% for car in cars %}<option value="{{ car.id }}" {% if car.id|string == selected_car_id %}selected{% endif %}>{{ car.name }}</option>{% endfor %}</select><p class="help-text">Saved specifications are included in every search. <a href="{{ url_for('cars.edit') }}" class="text-blue-400 underline">Add a car</a></p></div>
+    <div class="field mt-5" data-manual-vehicle><label for="vehicle">Vehicle name</label><input id="vehicle" name="vehicle" maxlength="120" value="{{ vehicle|default('') }}" placeholder="E.g. Renault 19 Chamade, 1991"><p class="help-text">Make, model and year.</p></div>
+  </section>
+  <section class="form-section"><h2 class="form-section-title">Part</h2><div class="field"><label for="description">Description <span class="text-blue-400">*</span></label><textarea id="description" name="description" data-character-count required minlength="10" maxlength="5000" rows="5" placeholder="E.g. Left rear tail light for a Phase 1 saloon. The existing unit has a cracked lens. Reference number…" aria-describedby="description-help">{{ description|default('') }}</textarea><div class="field-footer"><p id="description-help" class="help-text">Include the side, reference number or measurements. Minimum 10 characters.</p><span class="character-count" data-count-for="description"></span></div></div></section>
+  <section class="form-section"><h2 class="form-section-title">Photos <span class="text-xs font-normal text-gray-400">Optional</span></h2>
+    {% if photos %}<fieldset class="mb-5"><legend class="mb-3 text-sm">Current photos</legend><div class="grid grid-cols-2 gap-3 sm:grid-cols-3">{% for photo in photos %}<label class="rounded-lg border border-gray-700 p-2 text-xs"><img src="{{ url_for('photo', photo_id=photo.id) }}" alt="Photo {{ loop.index }}" class="mb-3 h-28 w-full rounded object-contain"><input type="checkbox" name="remove_photos" value="{{ photo.id }}" {% if photo.id|string in removed|default([]) %}checked{% endif %}>Remove photo {{ loop.index }}</label>{% endfor %}</div><p class="help-text">Unchecked photos stay in this request.</p></fieldset>{% endif %}
+    <div class="upload-area"><label for="photos">{{ icon('image', 20) }}{{ 'Add more photos' if order else 'Drop your photos here' }}</label><input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="photos-help" data-photo-preview data-max-files="6" data-max-size="5"><p id="photos-help" class="help-text">JPG, PNG or WebP · up to 6 photos total · 5 MB each.</p><div class="upload-preview" data-previews></div><p class="upload-summary" data-upload-summary role="status"></p></div>
+  </section>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 17) }}{{ 'Save changes' if order else 'Save request' }}</button><a href="{{ url_for('detail', order_id=order.id) if order else url_for('index') }}" class="btn btn-quiet">Cancel</a></div><p class="help-text">Saving a request does not start an AI search.</p>
+</form>
+
 </div>
 {% endblock %}

@@ -55,8 +55,12 @@ async function refreshHistory() {
     // Keep expanded snapshots and never replace the user's search form.
     for (const article of historySection.querySelectorAll('[data-search-id]')) {
       const replacement = next.querySelector(`[data-search-id="${article.dataset.searchId}"]`);
-      if (article.querySelector('details[open]') && replacement) {
-        replacement.querySelector('details').open = true;
+      if (replacement) {
+        const details = [...article.querySelectorAll('details')];
+        const nextDetails = [...replacement.querySelectorAll('details')];
+        details.forEach((detail, index) => {
+          if (nextDetails[index]) nextDetails[index].open = detail.open;
+        });
       }
     }
     if (next.innerHTML !== historySection.innerHTML) {
@@ -81,3 +85,12 @@ if (historySection.dataset.active === 'true') {
   updateStatus.textContent = 'Updating automatically…';
 }
 setTimeout(refreshHistory, retryDelay);
+
+// Delegated because new result cards arrive through automatic refresh.
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-parts-scroll]');
+  if (!button) return;
+  const track = button.closest('#parts-found').querySelector('.parts-track');
+  if (track) track.scrollBy({ left: Number(button.dataset.partsScroll) * (track.clientWidth * .85),
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+});

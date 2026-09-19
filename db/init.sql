@@ -117,3 +117,47 @@ CREATE TABLE IF NOT EXISTS listing_blacklist (
     UNIQUE (request_id, url_key)
 );
 ALTER TABLE searches ADD COLUMN IF NOT EXISTS excluded_listings JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS research_meta JSONB NOT NULL DEFAULT '{}';
+
+ALTER TABLE schedules ADD COLUMN IF NOT EXISTS discord_notify BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS discord_notify BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS discord_notifications (
+    search_id UUID PRIMARY KEY REFERENCES searches(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'sent', 'failed', 'skipped')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_error TEXT NOT NULL DEFAULT '',
+    message_id TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sent_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS discord_notifications_due_idx ON discord_notifications(next_attempt)
+    WHERE status = 'pending';
+ALTER TABLE discord_notifications ADD COLUMN IF NOT EXISTS messages JSONB NOT NULL DEFAULT '{}';
+
+CREATE TABLE IF NOT EXISTS discord_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    bot_token TEXT NOT NULL DEFAULT '',
+    channel_id VARCHAR(20) NOT NULL DEFAULT '',
+    owner_id VARCHAR(20) NOT NULL DEFAULT '',
+    app_url TEXT NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    version INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'unconfigured',
+    message TEXT NOT NULL DEFAULT '',
+    checked_at TIMESTAMPTZ,
+    heartbeat_at TIMESTAMPTZ
+);
+INSERT INTO discord_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS discord_confirmations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    search_id UUID NOT NULL REFERENCES searches(id) ON DELETE CASCADE,
+    listing_index INTEGER NOT NULL,
+    user_id VARCHAR(20) NOT NULL,
+    channel_id VARCHAR(20) NOT NULL,
+    message_id VARCHAR(20) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT now() + interval '5 minutes',
+    used_at TIMESTAMPTZ
+);

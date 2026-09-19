@@ -1,0 +1,4 @@
+<article class="car-card" data-car-name="{{ car.name }} {{ car.specs.make }} {{ car.specs.model }} {{ car.specs.year }} {{ car.specs.engine }}">
+  {% if car.photo_ids %}{% include 'car_gallery.html' %}{% else %}<div class="car-placeholder">{{ icon('car', 54) }}</div>{% endif %}
+  <div class="car-card-body"><h2><a href="{{ url_for('cars.detail', car_id=car.id) }}">{{ car.name }}</a></h2><p>{{ car.specs.model }}{% if car.specs.year %} · {{ car.specs.year }}{% endif %}{% if car.specs.engine %} · {{ car.specs.engine }}{% endif %}</p><div class="car-card-actions"><a class="btn btn-secondary" href="{{ url_for('new_request', car_id=car.id) }}">{{ icon('plus', 15) }}New part request</a><a class="btn btn-quiet" href="{{ url_for('cars.detail', car_id=car.id) }}">View car {{ icon('arrow', 15) }}</a></div></div>
+</article>

@@ -1,8 +1,8 @@
 <section id="parts-found" class="mt-8 space-y-4" aria-labelledby="parts-found-title">
   <div class="flex flex-wrap items-end justify-between gap-3">
     <div><h2 id="parts-found-title" class="text-2xl font-bold">Parts Found <span class="ml-2 text-sm font-normal text-gray-400">{{ found_parts|length }} unique listings</span></h2>
-    <p class="mt-2 text-sm text-gray-400">Your shortlist across all searches. Scroll sideways to compare.</p></div>
-    <span class="text-sm text-blue-400" aria-hidden="true">← Browse parts →</span>
+    </div>
+    {% if found_parts %}<div class="flex gap-2"><button type="button" class="btn btn-secondary" data-parts-scroll="-1" aria-label="Previous parts">←</button><button type="button" class="btn btn-secondary" data-parts-scroll="1" aria-label="Next parts">→</button></div>{% endif %}
   </div>
   {% if found_parts %}
   <div class="parts-track" tabindex="0" role="region" aria-label="Found parts, scroll horizontally">
@@ -18,7 +18,7 @@
           <span class="text-gray-400">{{ part.provider|capitalize }}</span>
         </div>
         <h3 class="break-words text-base font-semibold leading-snug">{{ part.title or 'Part listing' }}</h3>
-        <div><p class="break-words text-2xl font-bold tracking-tight text-white">{{ part.price or 'Price not confirmed' }}</p>
+        <div><p class="break-words part-price text-2xl font-bold tracking-tight">{{ part.price or 'Price not confirmed' }}</p>
           <p class="mt-1 break-words text-xs text-gray-400">Shipping: {{ part.shipping_cost or 'cost not confirmed' }}</p></div>
         <p class="break-words text-sm text-gray-300">{{ part.description|default('')|truncate(200) }}</p>
         <dl class="grid grid-cols-2 gap-3 border-y border-gray-800 py-3 text-sm">
@@ -33,14 +33,14 @@
           <p class="mt-2">Photo comparison: {{ {'compared':'AI reports photos compared', 'inconclusive':'Inconclusive', 'not_checked':'Not checked'}.get(part.visual_status, 'Not checked') }}</p>
           {% if part.availability_evidence %}<p class="mt-2 break-words">Stock evidence: {{ part.availability_evidence }}</p>{% endif %}
         </details>
-        <a href="{{ part.url }}" target="_blank" rel="noopener noreferrer" class="mt-auto block rounded-lg bg-blue-600 px-4 py-3 text-center text-sm font-semibold text-white hover:bg-blue-700">View seller listing ↗</a>
+        <a href="{{ part.url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary mt-auto">View seller listing ↗</a>
         <details class="text-sm">
           <summary class="cursor-pointer text-red-400">Remove &amp; blacklist</summary>
           <form method="post" action="{{ url_for('blacklist_listing', order_id=order.id) }}" class="mt-3 space-y-3">
             <input type="hidden" name="csrf" value="{{ csrf_token }}">
             <input type="hidden" name="url" value="{{ part.url }}">
             <label class="block text-xs text-gray-400">Reason (optional)
-              <input name="reason" maxlength="500" placeholder="Wrong version, damaged, already sold…" class="mt-2 w-full rounded-lg border border-gray-700 bg-gray-950 p-2 text-sm text-white">
+              <input name="reason" maxlength="500" placeholder="Wrong version, damaged, already sold…" class="mt-2 w-full rounded-lg border border-gray-700 bg-gray-950 p-2 text-sm text-gray-100">
             </label>
             <p class="text-xs text-gray-400">Hide this listing from this request, including future results. You can restore it below.</p>
             <button class="w-full rounded-lg border border-red-400 px-3 py-2 text-red-400 hover:bg-gray-800">Confirm removal</button>
@@ -50,8 +50,8 @@
     </article>
     {% endfor %}
   </div>
-  <p class="text-xs text-gray-500">AI-reported findings, not guaranteed matches or live stock. Photos load from seller websites. Latest result shown per listing, ignoring common tracking parameters.</p>
-  {% else %}<p class="rounded-lg border border-dashed border-gray-700 p-6 text-sm text-gray-400">No structured listings yet. Start a search above; found parts will appear here automatically.</p>{% endif %}
+  <p class="text-xs text-gray-500">AI-reported results. Confirm fitment, price and stock with the seller.</p>
+  {% else %}<div class="empty-state"><h3>No results</h3><a href="#research" class="btn btn-primary">{{ icon('search', 16) }}New search</a></div>{% endif %}
   {% if blacklist %}
   <details class="rounded-lg border border-gray-800 p-4">
     <summary class="cursor-pointer text-sm text-gray-300">Blacklist · {{ blacklist|length }} blocked listings</summary>

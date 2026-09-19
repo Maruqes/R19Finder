@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
+{% from 'components/ui.html' import icon %}
+{% block title %}Unable to continue{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold">Unable to continue</h1>
-<p class="my-4 text-gray-400">{{ message }}</p>
-<a class="text-blue-400 underline" href="{{ url_for('index') }}">Back to requests</a>
+<div class="empty-state error-page"><h1>Unable to continue</h1><p>{{ message }}</p><a class="btn btn-primary" href="{{ url_for('index') }}">{{ icon('back', 16) }}Back to requests</a></div>
 {% endblock %}

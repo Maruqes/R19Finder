@@ -12,8 +12,9 @@ from psycopg.rows import dict_row
 from PIL import Image, ImageOps, UnidentifiedImageError
 from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
 from ai import create_ai_blueprint, cached_codex_models
+from discord_integration import create_discord_blueprint
 from search import create_search_blueprint
-from listings import public_url, listing_key
+from listings import public_url, listing_key, blacklist_part
 from psycopg.types.json import Jsonb
 from scheduling import DAYS, LISBON
 from cars import create_cars_blueprint, resolve_car, CAR_QUERY
@@ -59,18 +60,26 @@ def security_headers(response):
 @app.get('/')
 def index():
     page = max(1, request.args.get('page', 1, type=int))
+    query = request.args.get('q', '').strip()[:200]
+    pattern = '%' + query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
     with connect() as conn:
-        total = conn.execute('SELECT count(*) AS total FROM requests').fetchone()['total']
+        request_count = conn.execute('SELECT count(*) AS total FROM requests').fetchone()['total']
+        total = conn.execute('SELECT count(*) AS total FROM requests WHERE vehicle ILIKE %s OR description ILIKE %s',
+                             (pattern, pattern)).fetchone()['total']
+        active_count = conn.execute("SELECT count(*) AS n FROM searches WHERE status IN ('queued', 'running')").fetchone()['n']
         cars = conn.execute(CAR_QUERY + ' ORDER BY name, id').fetchall()
         orders = conn.execute('''SELECT r.*, (SELECT count(*) FROM photos p WHERE p.request_id=r.id) AS photo_count,
-            (SELECT id FROM photos p WHERE p.request_id=r.id ORDER BY position LIMIT 1) AS cover_id
-            FROM requests r ORDER BY created_at DESC, id LIMIT 12 OFFSET %s''', ((page - 1) * 12,)).fetchall()
-    return render_template('index.html', orders=orders, total=total, page=page, cars=cars)
+            (SELECT id FROM photos p WHERE p.request_id=r.id ORDER BY position LIMIT 1) AS cover_id,
+            (SELECT status FROM searches s WHERE s.request_id=r.id ORDER BY s.created_at DESC, s.id DESC LIMIT 1) AS latest_status
+            FROM requests r WHERE vehicle ILIKE %s OR description ILIKE %s
+            ORDER BY created_at DESC, id LIMIT 12 OFFSET %s''', (pattern, pattern, (page - 1) * 12)).fetchall()
+    return render_template('index.html', orders=orders, total=total, page=page, cars=cars,
+                           query=query, request_count=request_count, active_count=active_count)
 
 
-def normalize_photo(upload):
-    data = upload.read(5 * 1024 * 1024 + 1)
-    if len(data) > 5 * 1024 * 1024:
+def normalize_photo(upload, max_bytes=5 * 1024 * 1024):
+    data = upload.read() if max_bytes is None else upload.read(max_bytes + 1)
+    if max_bytes is not None and len(data) > max_bytes:
         raise ValueError('Each photo must be no larger than 5 MB.')
     try:
         with warnings.catch_warnings():
@@ -94,8 +103,10 @@ def validate_csrf():
 
 
 app.register_blueprint(create_ai_blueprint(lambda: connect(), validate_csrf))
+app.register_blueprint(create_discord_blueprint(lambda: connect(), validate_csrf))
 app.register_blueprint(create_search_blueprint(lambda: connect(), validate_csrf))
-app.register_blueprint(create_cars_blueprint(lambda: connect(), validate_csrf, normalize_photo))
+app.register_blueprint(create_cars_blueprint(lambda: connect(), validate_csrf,
+    lambda upload: normalize_photo(upload, max_bytes=None)))
 
 
 def request_form(**context):
@@ -198,6 +209,7 @@ def detail(order_id):
         searches = conn.execute('SELECT * FROM searches WHERE request_id=%s ORDER BY created_at DESC', (order_id,)).fetchall()
         blacklist = conn.execute('SELECT * FROM listing_blacklist WHERE request_id=%s ORDER BY created_at DESC', (order_id,)).fetchall()
         schedules = conn.execute('SELECT * FROM schedules WHERE request_id=%s ORDER BY weekday, local_time', (order_id,)).fetchall()
+        discord_config = conn.execute("SELECT enabled, bot_token != '' AS configured FROM discord_settings WHERE id=1").fetchone()
         connection = conn.execute("SELECT models FROM ai_connections WHERE provider='openwebui'").fetchone()
         car = conn.execute('SELECT * FROM cars WHERE id=%s', (order['car_id'],)).fetchone() if order['car_id'] else None
     found_parts, seen_urls = [], {item['url_key'] for item in blacklist}
@@ -211,7 +223,7 @@ def detail(order_id):
                                        provider=search['provider']))
     return render_template('detail.html', order=order, photos=photos, searches=searches, found_parts=found_parts, blacklist=blacklist,
                            models=connection['models'], codex_models=cached_codex_models(), schedules=schedules, weekdays=DAYS, lisbon=LISBON, car=car,
-                           active_search=any(s['status'] in {'queued', 'running'} for s in searches))
+                           discord_config=discord_config, active_search=any(s['status'] in {'queued', 'running'} for s in searches))
 
 
 @app.post('/requests/<uuid:order_id>/blacklist')
@@ -222,17 +234,10 @@ def blacklist_listing(order_id):
     if not url or len(reason) > 500:
         abort(400)
     with connect() as conn:
-        order = conn.execute('SELECT id FROM requests WHERE id=%s FOR UPDATE', (order_id,)).fetchone()
-        if not order:
+        try:
+            blacklist_part(conn, order_id, url, reason)
+        except LookupError:
             abort(404)
-        searches = conn.execute('SELECT listings FROM searches WHERE request_id=%s', (order_id,)).fetchall()
-        listing = next((item for search in searches for item in search['listings'] if item.get('url') == url), None)
-        if listing is None:
-            abort(404)
-        conn.execute('''INSERT INTO listing_blacklist (request_id, url, url_key, title, reason)
-            VALUES (%s, %s, %s, %s, %s) ON CONFLICT (request_id, url_key)
-            DO UPDATE SET reason=EXCLUDED.reason''',
-            (order_id, url, listing_key(url), listing.get('title', ''), reason))
     flash('Listing removed from Parts Found and blacklisted for this request.')
     return redirect(url_for('detail', order_id=order_id, _anchor='parts-found'), code=303)
 
@@ -245,7 +250,7 @@ def restore_listing(order_id, entry_id):
                                (entry_id, order_id)).fetchone()
         if not deleted:
             abort(404)
-    flash('Listing restored. Future searches may recommend it again.')
+    flash('Listing restored to Parts Found. Future searches will look for other listings.')
     return redirect(url_for('detail', order_id=order_id, _anchor='parts-found'), code=303)
 
 
@@ -285,7 +290,7 @@ def health():
 
 @app.errorhandler(413)
 def too_large(error):
-    return render_template('error.html', message='The upload exceeds 32 MB. Use up to 6 photos of 5 MB each.'), 413
+    return render_template('error.html', message='The upload exceeds 32 MB. Upload fewer photos at a time.'), 413
 
 
 @app.errorhandler(400)

@@ -1,16 +1,7 @@
 {% extends 'base.html' %}
+{% from 'components/ui.html' import icon, heading, empty %}
 {% block content %}
-<div class="mb-6 flex items-center justify-between gap-4">
-  <div><h1 class="text-2xl font-bold">Cars</h1><p class="mt-2 text-sm text-gray-400">Keep the exact vehicle specifications together and reuse them in part requests.</p></div>
-  <a href="{{ url_for('cars.edit') }}" class="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white">Add car</a>
-</div>
-<div class="grid gap-4 sm:grid-cols-2">
-  {% for car in cars %}<article class="space-y-3 rounded-lg border border-gray-800 bg-gray-900 p-5">
-    {% include 'car_gallery.html' %}
-    <h2 class="break-words text-lg font-semibold"><a href="{{ url_for('cars.detail', car_id=car.id) }}" class="text-blue-400 hover:underline">{{ car.name }}</a></h2>
-    <p class="break-words text-sm text-gray-300">{{ car.specs.make }} {{ car.specs.model }} · {{ car.specs.year or 'Year unknown' }}</p>
-    <p class="break-words text-sm text-gray-400">{{ car.specs.generation }}{% if car.specs.engine %} · {{ car.specs.engine }}{% endif %}</p>
-    <a href="{{ url_for('new_request', car_id=car.id) }}" class="inline-block text-sm text-blue-400 underline">New part request</a>
-  </article>{% else %}<p class="text-gray-400">No cars yet. Add a car to keep its technical details ready for every search.</p>{% endfor %}
-</div>
+<div class="page-header-row">{{ heading('', 'Cars') }}<a href="{{ url_for('cars.edit') }}" class="btn btn-primary">{{ icon('plus', 17) }}Add car</a></div>
+{% if cars %}<div class="garage-toolbar"><span class="text-xs text-gray-400" data-garage-count role="status">{{ cars|length }} car{{ '' if cars|length == 1 else 's' }} in your garage</span><div class="search-tools"><label for="garage-filter" class="sr-only">Find a car</label><input id="garage-filter" type="search" placeholder="Find a car…" data-garage-filter></div></div><div class="grid gap-6 xl:grid-cols-3 sm:grid-cols-2" data-garage-grid>{% for car in cars %}{% include 'components/car_card.html' %}{% endfor %}</div><p class="empty-state" data-garage-empty hidden>No matching cars.</p>
+{% else %}{% call empty('car', 'No cars', '') %}<a href="{{ url_for('cars.edit') }}" class="btn btn-primary">{{ icon('plus', 17) }}Add car</a>{% endcall %}{% endif %}
 {% endblock %}

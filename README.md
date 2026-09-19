@@ -95,9 +95,9 @@ Codex CLI is installed in the application image. Authenticate with:
 make codex-login
 ```
 
-Follow the link and code displayed in the terminal. Your account may need device code login enabled in ChatGPT security settings. Then click **Check authentication** on the AI page.
+Follow the link and code displayed in the terminal. Your account may need device code login enabled in ChatGPT security settings. Then click **Check authentication and refresh models** on the AI page.
 
-This check runs `codex login status`. It confirms local authentication only, not online account validity, credits or model access. The container uses its own session and does not automatically reuse your host computer's Codex login. See the [official authentication documentation](https://developers.openai.com/codex/auth).
+This check runs `codex login status`, then queries `model/list` through `codex app-server` and displays the returned catalogue. Search forms discover models and supported reasoning levels automatically, with a short cache and the local catalogue as an offline fallback. No search or response generation is required to populate the selector. Listing models does not verify usage credits or successful inference. The container uses its own session and does not automatically reuse your host computer's Codex login. See the [official authentication documentation](https://developers.openai.com/codex/auth) and [app-server documentation](https://developers.openai.com/codex/app-server).
 
 To sign out:
 
@@ -129,7 +129,7 @@ References: [Open WebUI API](https://docs.openwebui.com/reference/api-endpoints/
 
 Open **Cars → Add car** to save a named vehicle profile. Make and model are required; year, generation/phase, body style, trim, engine/displacement/code, power, fuel, transmission, driven wheels, ABS, brakes and steering position are optional. Notes hold modifications, measurements and known references. Unknown details should stay blank rather than be guessed.
 
-Each car can have up to 6 profile photos (JPG, PNG or WebP, up to 5 MB each). Upload several when creating or editing a car; new uploads append to the gallery. Select individual existing photos for removal when saving. All uploads are validated before any changes are saved. Existing single-photo profiles migrate without losing their image. Images are resized, normalized to JPEG and stored in PostgreSQL. Profile photos are not sent to AI searches; those continue to use the part photos attached to each request.
+Each car can have any number of profile photos (JPG, PNG or WebP, no individual file size limit; up to 32 MB per upload). Upload several when creating or editing a car; new uploads append to the gallery. Select individual existing photos for removal when saving. All uploads are validated before any changes are saved. Existing single-photo profiles migrate without losing their image. Images are resized, normalized to JPEG and stored in PostgreSQL. Profile photos are not sent to AI searches; those continue to use the part photos attached to each request.
 
 The homepage shows **Your cars** above part requests. Car galleries on the homepage, Cars list and profile page automatically advance every 5 seconds when multiple photos exist. Use arrows or numbered selectors to choose a photo (this pauses autoplay), and Play/Pause to control rotation. Autoplay pauses while hovering, focusing a gallery, or hiding the tab; it starts paused when reduced motion is preferred. Photos retain their proportions inside a stable responsive frame, without cropping. One-photo galleries have no unnecessary controls.
 
@@ -139,7 +139,7 @@ Choose **Car profile** when creating or editing a request, or use **New part req
 
 **Parts Found**, above search history, collects structured listings across completed searches into horizontally scrollable cards. Cards show image, price, shipping costs, seller/location, pickup/shipping status, availability and expandable fitment checks. Listing URLs are deduplicated, ignoring fragments and common tracking parameters, retaining the latest result. This is accumulated search history, not live stock; it refreshes automatically alongside the history without resetting horizontal scroll.
 
-Use **Remove & blacklist** on a card, optionally add a reason, then confirm. The listing is persistently hidden from Parts Found for that request, even if another search returns it. Open **Blacklist** below the cards to restore a listing. Other requests are unaffected, and original AI answers remain in Search history. Both manual and scheduled searches snapshot the current blocked URLs and reasons for Codex/Open WebUI to avoid. Filtering in Parts Found also covers searches already in progress. Matching ignores fragments, query parameter order, `utm_*`, `fbclid` and `gclid`; a different seller URL or a relisted advert cannot reliably be identified as the same physical part.
+Use **Remove & blacklist** on a card, optionally add a reason, then confirm. The listing is persistently hidden from Parts Found for that request, even if another search returns it. Open **Blacklist** below the cards to restore a listing. Other requests are unaffected, and original AI answers remain in Search history. Both manual and scheduled searches snapshot all previously found and blocked URLs for Codex/Open WebUI to avoid. The worker refreshes exclusions before and after every research round and filters saved listings, linked summary paragraphs and source URLs on the server. Restoring a blocked item returns it to Parts Found; subsequent searches still seek new listings. Filtering in Parts Found also covers searches already in progress. Matching ignores fragments, query parameter order, `utm_*`, `fbclid` and `gclid`; a different seller URL or a relisted advert cannot reliably be identified as the same physical part.
 
 ### Weekly automations
 
@@ -183,7 +183,9 @@ For a specific Codex model, **Reasoning effort** lists its supported levels from
 
 Open WebUI needs a model that supports vision for photos and native tool calling for research. Enable web search and configure a search engine in Open WebUI. The connector creates a conversation, starts server-side tool execution with web search enabled, waits for completion and retrieves the answer. The conversation remains available through **Open conversation in Open WebUI**. API permissions must allow `/api/config`, `/api/models`, `/api/v1/chats`, `/api/chat/completions` and `/api/tasks`. [Open WebUI server-side tool calling](https://docs.openwebui.com/reference/server-side-tool-calling/).
 
-Codex research has a 30-minute execution timeout. Open WebUI research has no overall time limit: the worker polls until the remote task completes. Individual Open WebUI HTTP requests retain a 30-second network timeout (connection checks use 10 seconds). A stuck remote task can therefore hold the single research worker and delay later jobs. `SEARCH_TIMEOUT_SECONDS` is no longer used. On a worker restart, interrupted jobs are marked failed instead of automatically repeated. An Open WebUI task may still be running remotely after a connection failure or worker restart; inspect its conversation before retrying.
+Research uses at most three rounds, each with a 10-minute execution limit and a 30-minute overall budget (HTTP/cancellation overhead can add a few seconds). It stops early at the requested new-listing count, when a follow-up brings no new listings, when web-search evidence is absent, or when reported usage reaches 24,000 tokens. The token budget is checked between rounds and can be exceeded by an individual provider round; it is not a hard billing cap. Missing provider usage is labelled explicitly. Open WebUI receives a 5,000-token response limit and its active task is cancelled when a round times out. Individual HTTP requests retain a 30-second network timeout (connection checks use 10 seconds). `SEARCH_TIMEOUT_SECONDS` is no longer used. On a worker restart, interrupted jobs are marked failed instead of automatically repeated. An Open WebUI task may still be running remotely after a connection failure or worker restart; inspect its conversation before retrying.
+
+Each round searches configured priority websites and the open web, with instructions to use at most six search queries (at least two unrestricted) and eight new listing-page visits. These tool-use counts are prompt guidance; the round and time limits are enforced by the application. Later rounds receive compact query/reference notes, missing evidence and newly found URLs, rather than full prior transcripts. Codex uses a strict JSON output schema; both providers share server-side validation, fitment/availability ranking and exclusion filtering. Search history shows rounds, new/filtered counts, reported usage and the stopping reason. Partial results survive a later-round failure.
 
 The app requests web search, but model capability and provider configuration determine whether it actually happens. Results explicitly state when the provider supplied no search evidence. Check seller links, price, availability and compatibility before ordering. The app does not buy parts or contact sellers.
 
@@ -192,6 +194,28 @@ Worker logs:
 ```sh
 docker compose logs -f worker
 ```
+
+
+## Discord notifications and listing rejection
+
+Open **Discord** in the sidebar. Create a Discord application and bot in the [Developer Portal](https://discord.com/developers/applications). Install it on your server with the `bot` and `applications.commands` scopes and the **View Channels**, **Send Messages**, **Embed Links** and **Read Message History** permissions. No Message Content intent or public inbound endpoint is needed.
+
+Enable Discord Developer Mode, then copy a text channel ID and your own user ID into the settings page. Save the bot token there; it is encrypted using the existing persistent application encryption key and is never rendered back into the page. Only the configured user in the configured channel can run bot commands or use rejection buttons. An optional application URL adds a link to each request; use an address accessible from your phone. **Test connection** only checks credentials and channel access, without sending a message. Enable channel notifications on your phone.
+
+Each weekly schedule has its own **Discord notifications** switch, off by default. It can be set when creating schedules or changed independently on an existing slot. Scheduled jobs snapshot that preference. The sender also checks the current switch before delivery: turning it off or deleting the schedule suppresses remaining deliveries. Disabling the global bot pauses the delivery queue. Manual searches and searches without new eligible listings do not generate notifications.
+
+The separate `discord` Docker service sends one message per new piece, with price, seller, location, shipping information and listing links. A PostgreSQL outbox is committed with completed research results. Network/server errors and rate limits are retried with backoff (up to five consecutive attempts per piece); permanent failures appear under **Recent deliveries** with a **Retry** button. Successfully recorded messages are not resent. A stable Discord nonce suppresses short-term duplicates after an interrupted send; Discord only guarantees nonce deduplication for a few minutes, so a crash after remote delivery but before the local commit can still produce a duplicate after a long outage. Notification failures never change completed searches to failed. Restarts preserve the queue and the controls on previously sent messages.
+
+**Reject** opens a private confirmation with **Confirm rejection** and **Cancel**. Only confirmation adds the URL to the same request-scoped blacklist used by the web UI. Confirmation expires after five minutes and cannot be reused. Future research excludes that URL, including normalized tracking variants. Restore a rejected listing from **Parts Found → Blacklist** in the application.
+
+Commands, available in the configured server/channel:
+
+- `/requests`: the latest 10 requests.
+- `/schedules`: the next 10 schedule slots and their Discord preferences.
+- `/help`: available commands and actions.
+
+These commands are read-only and do not call an AI model. Bot configuration changes reconnect automatically. Keep Docker running to receive alerts and use the buttons.
+
 
 ## Persistence and backups
 

@@ -161,7 +161,7 @@ class ResearchTests(unittest.TestCase):
                     'sources': [{'metadata': [{'source': 'https://example.com/listing'}]}]}}}}}
             return httpx.Response(200, json=data)
 
-        with patch('search.check_openwebui', return_value=['vision-model']), patch('search.cipher') as encryption, patch('search.httpx.Client') as client, patch('search.time.sleep') as sleep, patch('search.time.monotonic', side_effect=[0, 10000]):
+        with patch('search.check_openwebui', return_value=['vision-model']), patch('search.cipher') as encryption, patch('search.httpx.Client') as client, patch('search.time.sleep') as sleep, patch('search.time.monotonic', return_value=0):
             encryption.return_value.decrypt.return_value = b'test-key'
             client.return_value.__enter__.return_value.request.side_effect = respond
             remote = []
@@ -191,6 +191,8 @@ class ResearchTests(unittest.TestCase):
                 seen.update(command=command, kwargs=kwargs)
                 Path(command[command.index('--output-last-message') + 1]).write_text('Found a part.')
                 kwargs['stdout'].write(b'{"item":{"type":"web_search","url":"https://example.com"}}\n')
+                kwargs['stdout'].write(b'{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":50}}\n')
+                seen['schema'] = json.loads(Path(command[command.index('--output-schema') + 1]).read_text())
 
             def communicate(_self, content, timeout):
                 seen['prompt'] = content
@@ -199,7 +201,7 @@ class ResearchTests(unittest.TestCase):
         with patch('search.subprocess.Popen', FakeProcess):
             result = run_codex(dict(self.job(), reasoning_effort='high'), [{'data': b'jpeg-test'}])
         self.assertIn('model_reasoning_effort="high"', seen['command'])
-        self.assertEqual(seen['timeout'], 1800)
+        self.assertEqual(seen['timeout'], 600)
         self.assertIn('web_search="live"', seen['command'])
         self.assertIn('--image', seen['command'])
         self.assertEqual(seen['command'][seen['command'].index('--model') + 1], 'test-model')
@@ -210,6 +212,62 @@ class ResearchTests(unittest.TestCase):
         self.assertNotIn('SECRET_KEY', seen['kwargs']['env'])
         self.assertIn(b'Used parts in Portugal', seen['prompt'])
         self.assertTrue(result['web_search_observed'])
+        self.assertEqual(result['total_tokens'], 150)
+        self.assertFalse(seen['schema']['additionalProperties'])
+
+    def test_worker_loops_with_both_providers(self):
+        self.conn.execute("UPDATE ai_connections SET models=%s, api_key='configured' WHERE provider='openwebui'", (Jsonb(['vision-model']),))
+        for provider in ('codex', 'openwebui'):
+            with self.subTest(provider=provider):
+                self.enqueue(model=provider if provider == 'codex' else 'openwebui:vision-model', preferred_options='2')
+                job = self.conn.execute("SELECT * FROM searches WHERE request_id=%s AND status='queued'", (self.order_id,)).fetchone()
+                responses = [{'result': json.dumps({'summary_markdown': 'Checked live listings',
+                    'listings': [{'url': f'https://example.com/{provider}/{i}', 'title': 'New option'}],
+                    'research_notes': {'next_queries': ['alternative reference']}}),
+                    'sources': [], 'web_search_observed': True, 'total_tokens': 100} for i in range(2)]
+                with patch(f'worker.run_{provider}', side_effect=responses) as run:
+                    process_job(job)
+                self.assertEqual(run.call_count, 2)
+                updated = self.conn.execute('SELECT * FROM searches WHERE id=%s', (job['id'],)).fetchone()
+                self.assertEqual(updated['status'], 'completed')
+                self.assertEqual(len(updated['listings']), 2)
+                self.assertEqual(len(updated['research_meta']['rounds']), 2)
+                second = run.call_args.args[0]
+                self.assertEqual(second['research_round']['previous_research']['next_queries'], ['alternative reference'])
+                self.assertTrue(any(item['url'].endswith(f'{provider}/0') for item in second['excluded_listings']))
+                self.assertEqual(len(run.call_args.args[1]), 1)
+
+    def test_worker_filters_blacklist_added_after_queueing(self):
+        self.enqueue(preferred_options='1')
+        job = self.job()
+        url = 'https://example.com/blocked'
+        self.conn.execute('INSERT INTO listing_blacklist(request_id,url,url_key) VALUES (%s,%s,%s)',
+                          (self.order_id, url, listing_key(url)))
+        result = {'result': json.dumps({'summary_markdown': '[Blocked](https://example.com/blocked?utm_source=x)',
+                    'listings': [{'url': url + '?utm_source=x'}]}),
+                  'sources': [url], 'web_search_observed': True}
+        with patch('worker.run_codex', return_value=result) as run:
+            process_job(job)
+        self.assertEqual(run.call_args.args[0]['excluded_listings'][0]['url'], url)
+        updated = self.job()
+        self.assertEqual(updated['listings'], [])
+        self.assertEqual(updated['sources'], [])
+        self.assertNotIn('/blocked', updated['result'])
+
+    def test_openwebui_timeout_cancels_only_its_tasks(self):
+        self.enqueue()
+        replies = [httpx.Response(200, json=value) for value in (
+            {'features': {'enable_web_search': True}}, {'id': 'owned-chat'},
+            {'task_ids': ['owned-task']}, {'task_ids': ['owned-task']}, {'status': True})]
+        with patch('search.check_openwebui', return_value=['vision-model']), patch('search.cipher') as encryption, \
+                patch('search.httpx.Client') as client, patch('search.time.monotonic', side_effect=[0, 601]):
+            encryption.return_value.decrypt.return_value = b'test-key'
+            request = client.return_value.__enter__.return_value.request
+            request.side_effect = replies
+            with self.assertRaisesRegex(ValueError, 'round time limit'):
+                run_openwebui(dict(self.job(), model='vision-model'), [],
+                              {'base_url': 'https://example.com', 'api_key': 'encrypted'}, lambda url: None)
+        self.assertEqual(request.call_args.args, ('POST', 'api/tasks/stop/owned-task'))
 
     def test_sources_reject_unsafe_urls(self):
         self.assertEqual(source_links([{'url': 'javascript:alert(1)'}, {'source': 'file:///etc/passwd'},
@@ -319,7 +377,7 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(self.job()['car_profile']['rear_brakes'], 'Drums')
         self.assertIn(b'Car profile snapshot', self.client.get(f'/requests/{self.order_id}').data)
 
-    def test_parts_found_deduplicates_latest_listing(self):
+    def test_parts_found_previously_found_listing_is_not_returned_again(self):
         for price in ('€100', '€90'):
             self.enqueue()
             job = self.conn.execute("SELECT * FROM searches WHERE request_id=%s AND status='queued'", (self.order_id,)).fetchone()
@@ -333,8 +391,11 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(page.count('class="part-card"'), 1)
         self.assertIn('1 unique listings', page)
         cards = page.split('id="parts-found"', 1)[1].split('id="history-update-status"', 1)[0]
-        self.assertIn('€90', cards)
-        self.assertNotIn('€100', cards)
+        self.assertIn('€100', cards)
+        self.assertNotIn('€90', cards)
+        latest = self.conn.execute('SELECT listings, result FROM searches WHERE id=%s', (job['id'],)).fetchone()
+        self.assertEqual(latest['listings'], [])
+        self.assertIn('No new eligible listings', latest['result'])
 
     def test_blacklist_remove_restore_and_future_search_snapshot(self):
         self.enqueue()
@@ -390,6 +451,19 @@ class ResearchTests(unittest.TestCase):
     def test_listing_key_keeps_product_identifiers(self):
         self.assertEqual(listing_key('https://EXAMPLE.com/item?id=1&utm_medium=x#photo'), listing_key('https://example.com/item?id=1'))
         self.assertNotEqual(listing_key('https://example.com/item?id=1'), listing_key('https://example.com/item?id=2'))
+
+    def test_schedule_excludes_parts_found_at_dispatch_time(self):
+        self.enqueue(action='schedule', weekdays=['0'], time_0='16:30')
+        self.enqueue()
+        previous = self.job()
+        found_url = 'https://example.com/already-found'
+        self.conn.execute("UPDATE searches SET status='completed', listings=%s WHERE id=%s",
+                          (Jsonb([{'url': found_url}]), previous['id']))
+        now = datetime.now(timezone.utc)
+        self.conn.execute('UPDATE schedules SET next_run=%s WHERE request_id=%s', (now - timedelta(seconds=1), self.order_id))
+        self.assertEqual(dispatch_due(self.conn, now), 1)
+        scheduled = self.conn.execute("SELECT excluded_listings FROM searches WHERE request_id=%s AND status='queued'", (self.order_id,)).fetchone()
+        self.assertEqual(scheduled['excluded_listings'], [{'url': found_url, 'reason': 'Already in Parts Found.'}])
 
     def test_weekly_schedule_settings_and_dispatch(self):
         response = self.enqueue(action='schedule', weekdays=['0', '3'], time_0='16:30', time_3='20:50',

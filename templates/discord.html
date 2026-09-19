@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% from 'components/ui.html' import icon, heading %}
+{% block title %}Discord{% endblock %}
+{% block content %}
+{{ heading('', 'Discord', 'Scheduled results and confirmed listing rejection.') }}
+{% if error %}<p role="alert" tabindex="-1" class="notice">{{ error }}</p>{% endif %}
+<div class="form-layout">
+  <section class="panel">
+    <div class="section-header"><h2>Bot settings</h2><span class="badge {{ 'badge-ok' if config.online else 'badge-error' if config.status == 'error' else '' }}">{{ 'Online' if config.online else 'Disabled' if not config.enabled and config.has_token else 'Not configured' if not config.has_token else 'Offline' }}</span></div>
+    <form method="post" data-submit-state class="space-y-5">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field"><label for="bot_token">Bot token {% if config.has_token %}<span class="badge">Saved</span>{% endif %}</label><input id="bot_token" name="bot_token" type="password" autocomplete="new-password" maxlength="256" {% if not config.has_token %}required{% endif %} placeholder="{{ 'Leave blank to keep the saved token' if config.has_token else 'Token from the Discord Developer Portal' }}"><p class="help-text">Stored encrypted. Never use your personal account token.</p></div>
+      <div class="field-grid">
+        <div class="field"><label for="channel_id">Channel ID</label><input id="channel_id" name="channel_id" required inputmode="numeric" pattern="[0-9]{17,20}" maxlength="20" value="{{ submitted.get('channel_id', config.channel_id) }}" placeholder="Text channel ID"><p class="help-text">The bot sends results to this channel.</p></div>
+        <div class="field"><label for="owner_id">Your Discord user ID</label><input id="owner_id" name="owner_id" required inputmode="numeric" pattern="[0-9]{17,20}" maxlength="20" value="{{ submitted.get('owner_id', config.owner_id) }}" placeholder="Your user ID"><p class="help-text">Only this user can run commands or reject listings.</p></div>
+      </div>
+      <div class="field"><label for="app_url">Application URL <span class="text-gray-400">· optional</span></label><input id="app_url" name="app_url" type="url" maxlength="2048" value="{{ submitted.get('app_url', config.app_url) }}" placeholder="http://your-computer:8000"><p class="help-text">Adds a link to the request. Use an address your phone can access.</p></div>
+      <label class="toggle"><input type="checkbox" name="enabled" value="1" role="switch" {% if config.enabled or not config.has_token %}checked{% endif %}><span>Enable Discord bot</span></label>
+      <button type="submit" class="btn btn-primary">Save settings</button>
+    </form>
+    <div class="mt-5 border-t border-gray-800 pt-4">
+      <form method="post" action="{{ url_for('discord.test') }}" data-submit-state><input type="hidden" name="csrf" value="{{ csrf_token }}"><button type="submit" class="btn btn-secondary" {% if not config.has_token %}disabled{% endif %}>Test connection</button><p class="help-text">Checks token and channel access. Does not send a message.</p></form>
+      {% if config.message %}<p role="status" class="help-text {{ 'text-red-300' if config.status == 'error' }}">{{ config.message }}</p>{% endif %}
+    </div>
+  </section>
+  <details class="panel mt-5" {% if not config.has_token %}open{% endif %}>
+    <summary class="font-semibold">Setup</summary>
+    <ol class="list-decimal space-y-3 pl-5 text-sm text-gray-300">
+      <li>Create an application in the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" class="text-blue-400 underline">Discord Developer Portal</a>. Under <strong>Bot</strong>, generate a token and paste it above.</li>
+      <li>Under <strong>Installation → Guild Install</strong>, select <code>bot</code> and <code>applications.commands</code>. Grant <strong>View Channels</strong>, <strong>Send Messages</strong>, <strong>Embed Links</strong> and <strong>Read Message History</strong>. Use the install link to add the bot to your server.</li>
+      <li>In Discord, enable <strong>Settings → Advanced → Developer Mode</strong>. Copy the text channel ID and your user ID into the fields above. Ensure the bot can access that channel.</li>
+      <li>Save settings. Enable <strong>Discord notifications</strong> on the schedules you want. Allow notifications for this channel on your phone.</li>
+    </ol>
+    <p class="help-text mt-4">Keep Docker running. No public URL or Message Content intent is required.</p>
+  </details>
+  <section class="panel mt-5"><h2 class="panel-title">Commands and buttons</h2><dl class="discord-commands"><div><dt>/requests</dt><dd>Last 10 requests.</dd></div><div><dt>/schedules</dt><dd>Schedules and notification settings.</dd></div><div><dt>/help</dt><dd>Available commands.</dd></div><div><dt>Reject</dt><dd>Asks for confirmation, then blacklists the listing for that request. Restore it from Parts Found in the app.</dd></div></dl><p class="help-text">One message per new piece. No notification for empty or failed searches. Commands do not call AI.</p></section>
+</div>
+<section class="mt-8" aria-labelledby="deliveries-title"><div class="section-header"><h2 id="deliveries-title">Recent deliveries</h2><a href="{{ url_for('discord.settings') }}" class="text-link">Refresh</a></div>
+  {% if deliveries %}<div class="request-list">{% for delivery in deliveries %}<div class="request-row"><div class="request-info"><h3>{{ delivery.vehicle or 'Part request' }}</h3><p>{{ delivery.created_at.strftime('%d %b %Y, %H:%M') }} UTC · {{ delivery.messages|length }} piece(s) sent</p>{% if delivery.last_error %}<p class="mt-1 text-red-300">{{ delivery.last_error }}</p>{% endif %}</div><span class="badge badge-{{ 'ok' if delivery.status == 'sent' else 'error' if delivery.status == 'failed' else 'queued' if delivery.status == 'pending' else '' }}">{{ delivery.status|capitalize }}</span>{% if delivery.status == 'failed' %}<form method="post" action="{{ url_for('discord.retry', search_id=delivery.search_id) }}" data-submit-state><input type="hidden" name="csrf" value="{{ csrf_token }}"><button type="submit" class="btn btn-secondary">Retry</button></form>{% endif %}</div>{% endfor %}</div>{% else %}<p class="text-sm text-gray-400">No deliveries.</p>{% endif %}
+</section>
+{% endblock %}

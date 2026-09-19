@@ -6,7 +6,7 @@ document.querySelectorAll('[data-car-gallery]').forEach((gallery) => {
   const pause = gallery.querySelector('[data-pause]');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let current = 0;
-  let paused = reducedMotion.matches;
+  let paused = true;
   function show(index) {
     current = (index + slides.length) % slides.length;
     slides.forEach((slide, i) => { slide.hidden = i !== current; });

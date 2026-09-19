@@ -116,11 +116,23 @@ class ApplicationTests(unittest.TestCase):
         self.client.post(car_url + '/edit', data=dict(data, remove_photo='1'))
         self.assertEqual(self.client.get(car_url + '/photo').status_code, 404)
 
-    def test_car_photo_rejects_oversized_upload(self):
-        response = self.client.post('/cars/new', data={'csrf': self.csrf, 'name': 'Big photo',
-            'make': 'Renault', 'model': '19', 'photo': (io.BytesIO(b'x' * (5 * 1024 * 1024 + 1)), 'big.jpg')})
-        self.assertEqual(response.status_code, 400)
-        self.assertIsNone(self.conn.execute("SELECT id FROM cars WHERE name='Big photo'").fetchone())
+    def test_car_photo_accepts_more_than_five_mb(self):
+        def photo():
+            stream = io.BytesIO()
+            Image.new('RGB', (1500, 1500), 'blue').save(stream, 'PNG', compress_level=0)
+            self.assertGreater(stream.tell(), 5 * 1024 * 1024)
+            stream.seek(0)
+            return stream, 'big.png'
+
+        data = {'csrf': self.csrf, 'name': 'Big photo', 'make': 'Renault', 'model': '19'}
+        response = self.client.post('/cars/new', data=dict(data, photos=photo()))
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(self.client.get(response.location + '/photo').mimetype, 'image/jpeg')
+        self.assertEqual(self.client.post(response.location + '/edit',
+            data=dict(data, photos=photo())).status_code, 303)
+        car_id = response.location.rsplit('/', 1)[-1]
+        self.assertEqual(self.conn.execute('SELECT count(*) AS n FROM car_photos WHERE car_id=%s',
+            (car_id,)).fetchone()['n'], 2)
 
     def test_phone_photo_orientation_and_proportions(self):
         for orientation in range(1, 9):
@@ -147,11 +159,11 @@ class ApplicationTests(unittest.TestCase):
             stream.seek(0)
             return stream, 'car.png'
         data = {'csrf': self.csrf, 'name': 'Gallery car', 'make': 'Renault', 'model': '19'}
-        response = self.client.post('/cars/new', data=dict(data, photos=[photo('red'), photo('blue')]))
+        response = self.client.post('/cars/new', data=dict(data, photos=[photo('red')] + [photo('blue') for _ in range(6)]))
         self.assertEqual(response.status_code, 303)
         car_id = response.location.rsplit('/', 1)[-1]
         photos = self.conn.execute('SELECT id FROM car_photos WHERE car_id=%s ORDER BY position', (car_id,)).fetchall()
-        self.assertEqual(len(photos), 2)
+        self.assertEqual(len(photos), 7)
         page = self.client.get('/').get_data(as_text=True)
         self.assertIn('Gallery car', page)
         self.assertIn('Pause slideshow', page)
@@ -160,15 +172,15 @@ class ApplicationTests(unittest.TestCase):
             self.assertIn(url, page)
             self.assertEqual(self.client.get(url).mimetype, 'image/jpeg')
         self.assertEqual(self.client.post(response.location + '/edit', data=dict(data,
-            photos=[photo('red') for _ in range(5)])).status_code, 400)
+            photos=[photo('red') for _ in range(5)])).status_code, 303)
         self.assertEqual(self.client.post(response.location + '/edit', data=dict(data,
             remove_photos=['00000000-0000-0000-0000-000000000000'])).status_code, 400)
         self.assertEqual(self.client.post(response.location + '/edit', data=dict(data,
             remove_photos=[str(photos[0]['id'])], photos=[photo('green')])).status_code, 303)
         current = self.conn.execute('SELECT id, position FROM car_photos WHERE car_id=%s ORDER BY position', (car_id,)).fetchall()
-        self.assertEqual(len(current), 2)
+        self.assertEqual(len(current), 12)
         self.assertEqual(current[0]['id'], photos[1]['id'])
-        self.assertEqual([row['position'] for row in current], [0, 1])
+        self.assertEqual([row['position'] for row in current], list(range(12)))
 
     def test_validation(self):
         self.assertEqual(self.client.post('/requests', data={'description': 'Missing CSRF token'}).status_code, 400)

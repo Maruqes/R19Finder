@@ -1,35 +1,24 @@
 {% extends 'base.html' %}
+{% from 'components/ui.html' import icon, heading %}
+{% macro spec_field(key, label, placeholder) %}
+<div class="field"><label for="{{ key }}">{{ label }}{% if key in ['make', 'model'] %} <span class="text-blue-400">*</span>{% endif %}</label>
+{% if key == 'abs' %}<select id="abs" name="abs">{% for value, text in [('', 'Unknown'), ('Yes', 'Yes'), ('No', 'No')] %}<option value="{{ value }}" {% if values.get('abs', '') == value %}selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+{% else %}<input id="{{ key }}" name="{{ key }}" {% if key in ['make', 'model'] %}required{% endif %} {% if key == 'year' %}inputmode="numeric" pattern="[0-9]{4}"{% endif %} maxlength="120" value="{{ values.get(key, '') }}" placeholder="{{ placeholder }}">{% endif %}</div>
+{% endmacro %}
+{% block title %}{{ 'Edit car' if car else 'Add car' }}{% endblock %}
 {% block content %}
-<div class="mx-auto max-w-3xl">
-  <a href="{{ url_for('cars.index') }}" class="text-sm text-blue-400 hover:underline">← Cars</a>
-  <h1 class="mb-5 mt-4 text-2xl font-bold">{{ 'Edit car' if car else 'Add car' }}</h1>
-  <form method="post" enctype="multipart/form-data" class="space-y-6 rounded-lg border border-gray-800 bg-gray-900 p-6">
-    <input type="hidden" name="csrf" value="{{ csrf_token }}">
-    {% if error %}<p role="alert" class="text-sm text-red-300">{{ error }} Select any new photo again.</p>{% endif %}
-    <p class="text-sm text-gray-400">Only profile name, make and model are required. Leave uncertain details blank. Specifications and notes are sent to the selected AI when you search for parts.</p>
-    <div><label for="name" class="mb-2 block text-sm font-medium">Profile name</label><input id="name" name="name" required maxlength="120" value="{{ values.get('name', '') }}" placeholder="My Renault 19 Chamade" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm"></div>
-    <div class="space-y-3">
-      <label for="photos" class="block text-sm font-medium">Car photos (optional)</label>
-      {% if car and car.photo_ids %}<div class="grid grid-cols-2 gap-3">
-      {% for photo_id in car.photo_ids %}<label class="rounded-lg border border-gray-700 p-2 text-sm">
-        <div class="car-photo-frame"><img src="{{ url_for('cars.photo', car_id=car.id, photo_id=photo_id) }}" alt="Current photo {{ loop.index }} of {{ car.name }}" class="car-photo car-photo-compact"></div>
-        <input type="checkbox" name="remove_photos" value="{{ photo_id }}" {% if photo_id|string in request.form.getlist('remove_photos') %}checked{% endif %}> Remove photo {{ loop.index }}
-      </label>{% endfor %}</div>{% endif %}
-      <input id="photos" name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp" class="block w-full text-sm text-gray-400">
-      <p class="text-xs text-gray-400">Up to 6 photos, 5 MB each. JPG, PNG or WebP. New uploads are added; existing photos stay unless selected for removal. Profile photos are not sent to the AI.</p>
-    </div>
-    <fieldset><legend class="mb-4 font-semibold">Vehicle specifications</legend>
-      <div class="grid gap-4 sm:grid-cols-2">
-        {% for key, label, placeholder in fields %}<div>
-          <label for="{{ key }}" class="mb-2 block text-sm font-medium">{{ label }}</label>
-          {% if key == 'abs' %}<select id="abs" name="abs" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">
-            {% for value, text in [('', 'Unknown'), ('Yes', 'Yes'), ('No', 'No')] %}<option value="{{ value }}" {% if values.get('abs', '') == value %}selected{% endif %}>{{ text }}</option>{% endfor %}
-          </select>{% else %}<input id="{{ key }}" name="{{ key }}" {% if key in ['make', 'model'] %}required{% endif %} {% if key == 'year' %}inputmode="numeric" pattern="[0-9]{4}"{% endif %} maxlength="120" value="{{ values.get(key, '') }}" placeholder="{{ placeholder }}" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">{% endif %}
-        </div>{% endfor %}
-      </div>
-    </fieldset>
-    <div><label for="notes" class="mb-2 block text-sm font-medium">Other characteristics, modifications and known references</label><textarea id="notes" name="notes" maxlength="3000" rows="4" placeholder="E.g. original rear drum brakes, axle markings, measured mounting distances, modifications…" class="w-full rounded-md border border-gray-700 bg-gray-950 p-3 text-sm">{{ values.get('notes', '') }}</textarea><p class="mt-2 text-xs text-gray-400">Do not include personal information. Changes affect future searches, including automations; past search snapshots stay unchanged.</p></div>
-    <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Save car</button>
-  </form>
-</div>
+<a href="{{ url_for('cars.detail', car_id=car.id) if car else url_for('cars.index') }}" class="breadcrumb">{{ icon('back', 16) }}{{ car.name if car else 'Your cars' }}</a>
+{{ heading('', 'Edit car' if car else 'Add car') }}
+<div class="form-layout"><form method="post" enctype="multipart/form-data" class="panel" data-submit-state>
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  {% if error %}<p role="alert" tabindex="-1" class="mb-5 rounded-lg bg-red-950 p-4 text-sm text-red-300">{{ error }} Select any new photo again.</p>{% endif %}
+  <section class="form-section"><h2 class="form-section-title">Vehicle</h2><div class="field mb-5"><label for="name">Profile name <span class="text-blue-400">*</span></label><input id="name" name="name" required maxlength="120" value="{{ values.get('name', '') }}" placeholder="E.g. My Renault 19 Chamade"></div><div class="field-grid">{% for key, label, placeholder in fields if key in ['make', 'model', 'year', 'body_style'] %}{{ spec_field(key, label, placeholder) }}{% endfor %}</div><p class="help-text">Only profile name, make and model are required.</p></section>
+  <section class="form-section"><h2 class="form-section-title">Car photos <span class="text-xs font-normal text-gray-400">Optional</span></h2>
+    {% if car and car.photo_ids %}<div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3">{% for photo_id in car.photo_ids %}<label class="rounded-lg border border-gray-700 p-2 text-xs"><img src="{{ url_for('cars.photo', car_id=car.id, photo_id=photo_id) }}" alt="Current photo {{ loop.index }} of {{ car.name }}" class="mb-3 h-28 w-full object-contain"><input type="checkbox" name="remove_photos" value="{{ photo_id }}" {% if photo_id|string in request.form.getlist('remove_photos') %}checked{% endif %}>Remove photo {{ loop.index }}</label>{% endfor %}</div>{% endif %}
+    <div class="upload-area"><label for="photos">{{ icon('image', 20) }}Drop photos here or choose files</label><input id="photos" name="photos" type="file" multiple accept="image/jpeg,image/png,image/webp" data-photo-preview aria-describedby="car-photos-help"><p id="car-photos-help" class="help-text">JPG, PNG or WebP · 32 MB per upload. Select existing photos to remove them.</p><div class="upload-preview" data-previews></div><p class="upload-summary" data-upload-summary role="status"></p></div>
+  </section>
+  <details class="form-section" {% if car or error %}open{% endif %}><summary class="font-semibold">Technical specifications <span class="ml-2 text-xs font-normal text-gray-400">Optional</span></summary><p class="help-text mb-5">Leave unknown specifications blank.</p><div class="field-grid">{% for key, label, placeholder in fields if key not in ['make', 'model', 'year', 'body_style'] %}{{ spec_field(key, label, placeholder) }}{% endfor %}</div></details>
+  <div class="field"><label for="notes">Notes <span class="text-gray-400">· optional</span></label><textarea id="notes" name="notes" data-character-count maxlength="3000" rows="3" placeholder="E.g. Original rear drum brakes, axle reference, mounting measurements…">{{ values.get('notes', '') }}</textarea><div class="field-footer"><p class="help-text">Include useful technical details. Avoid personal information.</p><span class="character-count" data-count-for="notes"></span></div></div>
+  <div class="form-actions"><button type="submit" class="btn btn-primary">{{ icon('check', 17) }}Save car</button><a href="{{ url_for('cars.detail', car_id=car.id) if car else url_for('cars.index') }}" class="btn btn-quiet">Cancel</a></div>
+</form></div>
 {% endblock %}

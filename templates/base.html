@@ -1,27 +1,35 @@
+{% from 'components/ui.html' import icon %}
+{% set endpoint = request.endpoint or '' %}
+{% set section = 'cars' if endpoint.startswith('cars.') else 'websites' if endpoint == 'websites' else 'ai' if endpoint.startswith('ai.') else 'discord' if endpoint.startswith('discord.') else 'requests' %}
 <!doctype html>
-<html lang="en" class="scheme-dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>R19 Finder · Car part requests</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111113">
+  <title>{% block title %}{{ {'cars': 'Your cars', 'websites': 'Search sources', 'ai': 'AI connections', 'discord': 'Discord', 'requests': 'Part requests'}[section] }}{% endblock %} · R19 Finder</title>
+  <meta name="description" content="Car profiles, part requests and search results.">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="bg-gray-950 text-gray-100 antialiased">
-  <header class="border-b border-gray-800 bg-gray-900">
-    <nav class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-5" aria-label="Navigation">
-      <a href="{{ url_for('index') }}" class="text-xl font-bold">R19 Finder</a>
-      <div class="flex items-center gap-4">
-        <a href="{{ url_for('cars.index') }}" class="text-sm text-gray-300 hover:text-white">Cars</a>
-        <a href="{{ url_for('websites') }}" class="text-sm text-gray-300 hover:text-white">Websites</a>
-        <a href="{{ url_for('ai.settings') }}" class="text-sm text-gray-300 hover:text-white">AI</a>
-        <a href="{{ url_for('new_request') }}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">New request</a>
-      </div>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <aside class="app-sidebar">
+    <a href="{{ url_for('index') }}" class="brand" aria-label="R19 Finder home">R19<span>Finder</span></a>
+    <a href="{{ url_for('new_request') }}" class="btn btn-primary sidebar-create">{{ icon('plus', 16) }}New request</a>
+    <nav class="primary-nav" aria-label="Main navigation">
+      {% for key, route, label, glyph in [('requests', 'index', 'Requests', 'part'), ('cars', 'cars.index', 'Cars', 'car'), ('websites', 'websites', 'Sources', 'globe'), ('ai', 'ai.settings', 'AI connections', 'settings'), ('discord', 'discord.settings', 'Discord', 'chat')] %}
+      <a href="{{ url_for(route) }}" class="nav-link {{ 'is-active' if section == key }}" {% if section == key %}aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
+      {% endfor %}
     </nav>
-  </header>
-  <main class="mx-auto max-w-5xl px-4 py-8">
-    {% for message in get_flashed_messages() %}<p role="status" class="mb-6 rounded-lg bg-green-950 p-4 text-green-300">{{ message }}</p>{% endfor %}
-    {% block content %}{% endblock %}
-  </main>
-<script src="{{ url_for('static', filename='car-gallery.js') }}" defer></script>
+  </aside>
+  <div class="app-frame">
+    <main id="main-content" class="app-main" tabindex="-1">
+      {% for message in get_flashed_messages() %}<div role="status" class="notice notice-success">{{ icon('check') }}<p>{{ message }}</p><button type="button" data-dismiss-notice aria-label="Dismiss notification">×</button></div>{% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='ui.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='car-gallery.js') }}" defer></script>
 </body>
 </html>

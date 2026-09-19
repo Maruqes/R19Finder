@@ -31,6 +31,10 @@ services:
     extends:
       service: worker
     command: ["python", "scheduler.py"]
+  discord:
+    extends:
+      service: worker
+    command: ["python", "discord_worker.py"]
   db:
     image: postgres:17-alpine
     network_mode: host
