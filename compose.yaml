@@ -27,6 +27,10 @@ services:
         condition: service_healthy
     healthcheck:
       disable: true
+  enrichment:
+    extends:
+      service: worker
+    command: ["python", "enrichment_worker.py"]
   scheduler:
     extends:
       service: worker

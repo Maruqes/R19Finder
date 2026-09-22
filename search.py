@@ -19,6 +19,7 @@ from psycopg.types.json import Jsonb
 from ai import check_codex, check_openwebui, cipher, cached_codex_models
 from scheduling import enqueue_search, next_occurrence
 from research_loop import ROUND_SECONDS, MAX_OUTPUT_TOKENS
+from language_settings import language_context, LANGUAGE_RULES
 from research_schema import RESEARCH_SCHEMA
 
 CODEX_TIMEOUT_SECONDS = ROUND_SECONDS
@@ -164,9 +165,14 @@ If nothing useful remains, return an empty listings array and explain the limita
 '''
 
 
+SYSTEM_PROMPT += "\n" + LANGUAGE_RULES + "\nSearch exact OEM/manufacturer/casting/catalogue identifiers with the specific part and variant, not just the car model. Cross-check side, phase, body, engine, connectors and supersession before claiming fitment. Candidate references remain leads, never hard filters.\n"
+
 def prompt_for(job):
     return json.dumps({'vehicle': job['vehicle'], 'part_description': job['description'],
                        'car_profile': job.get('car_profile', {}),
+                       'language_preferences': language_context(job.get('language_preferences')),
+                       'part_profile': job.get('part_profile', {}),
+                       'part_profile_rules': 'Use aliases and references to expand discovery. Unverified facts are leads, never proof of fitment or rigid filters. Ignore rejected facts.',
                        'excluded_listings': job.get('excluded_listings', []),
                        'research_round': job.get('research_round', {}),
                        'additional_instructions': job['instructions'],
@@ -208,12 +214,14 @@ def source_links(value):
     return links
 
 
-def run_codex(job, photos):
+def run_codex(job, photos, *, system_prompt=None, input_text=None, output_schema=None, is_cancelled=None, on_progress=None):
     check_codex()
+    if on_progress:
+        on_progress('generating')
     with tempfile.TemporaryDirectory(prefix='r19finder-search-') as directory:
         output = Path(directory) / 'answer.txt'
         schema = Path(directory) / 'research-schema.json'
-        schema.write_text(json.dumps(RESEARCH_SCHEMA))
+        schema.write_text(json.dumps(output_schema or RESEARCH_SCHEMA))
         command = ['codex', 'exec', '--ignore-user-config', '--ignore-rules',
                    '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only',
                    '-c', 'cli_auth_credentials_store="file"', '-c', 'web_search="live"',
@@ -237,13 +245,22 @@ def run_codex(job, photos):
         with tempfile.TemporaryFile() as events, tempfile.TemporaryFile() as errors:
             process = subprocess.Popen(command, cwd=directory, env=environment, stdin=subprocess.PIPE,
                                        stdout=events, stderr=errors, start_new_session=True)
-            try:
-                process.communicate((SYSTEM_PROMPT + '\n\nBuyer request:\n' + prompt_for(job)).encode(),
-                                    timeout=job.get('round_timeout_seconds', CODEX_TIMEOUT_SECONDS))
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
-                raise ValueError('Codex research reached the round time limit. Try a more specific request.') from None
+            deadline = time.monotonic() + job.get('round_timeout_seconds', CODEX_TIMEOUT_SECONDS)
+            payload = ((system_prompt or SYSTEM_PROMPT) + '\n\nInput:\n' + (input_text if input_text is not None else prompt_for(job))).encode()
+            while True:
+                if (is_cancelled and is_cancelled()) or time.monotonic() >= deadline:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+                    raise ValueError('Codex task cancelled or reached its time limit.')
+                try:
+                    process.communicate(payload, timeout=min(2, max(.1, deadline - time.monotonic())) if is_cancelled else job.get('round_timeout_seconds', CODEX_TIMEOUT_SECONDS))
+                    break
+                except subprocess.TimeoutExpired:
+                    if not is_cancelled:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait()
+                        raise ValueError('Codex research reached the round time limit. Try a more specific request.') from None
+                    payload = None
             if process.returncode != 0 or not output.exists():
                 raise ValueError('Codex could not complete the search. Check its login, model access and account limits.')
             result = output.read_text().strip()
@@ -296,7 +313,7 @@ def api_json(client, method, path, **kwargs):
         raise ValueError('Open WebUI returned an invalid response.') from None
 
 
-def run_openwebui(job, photos, connection, save_remote):
+def run_openwebui(job, photos, connection, save_remote, *, system_prompt=None, input_text=None, require_web=True, is_cancelled=None):
     deadline = time.monotonic() + job.get('round_timeout_seconds', ROUND_SECONDS)
     if job['model'] not in check_openwebui(connection):
         raise ValueError('The selected model is no longer available. Refresh the model list and choose another.')
@@ -305,17 +322,19 @@ def run_openwebui(job, photos, connection, save_remote):
                       headers={'Authorization': f'Bearer {key}'}, verify=False,
                       follow_redirects=False, timeout=30) as client:
         config = api_json(client, 'GET', 'api/config')
-        if not config.get('features', {}).get('enable_web_search'):
+        web_enabled = bool(config.get('features', {}).get('enable_web_search'))
+        if require_web and not web_enabled:
             raise ValueError('Enable web search and configure a search engine in Open WebUI before searching.')
         user_id, answer_id = str(uuid.uuid4()), str(uuid.uuid4())
-        content = [{'type': 'text', 'text': prompt_for(job)}]
+        input_text = input_text if input_text is not None else prompt_for(job)
+        content = [{'type': 'text', 'text': input_text}]
         images = []
         for photo in photos:
             data_url = 'data:image/jpeg;base64,' + base64.b64encode(photo['data']).decode()
             content.append({'type': 'image_url', 'image_url': {'url': data_url}})
             images.append({'type': 'image', 'url': data_url})
         messages = {
-            user_id: {'id': user_id, 'role': 'user', 'content': prompt_for(job), 'files': images,
+            user_id: {'id': user_id, 'role': 'user', 'content': input_text, 'files': images,
                       'timestamp': int(time.time()), 'models': [job['model']], 'parentId': None,
                       'childrenIds': [answer_id]},
             answer_id: {'id': answer_id, 'role': 'assistant', 'content': '', 'parentId': user_id,
@@ -332,16 +351,16 @@ def run_openwebui(job, photos, connection, save_remote):
         remote_url = connection['base_url'].rstrip('/') + '/c/' + quote(chat_id, safe='')
         save_remote(remote_url)
         api_json(client, 'POST', 'api/chat/completions', json={
-            'model': job['model'], 'messages': [{'role': 'system', 'content': SYSTEM_PROMPT},
+            'model': job['model'], 'messages': [{'role': 'system', 'content': system_prompt or SYSTEM_PROMPT},
                                                {'role': 'user', 'content': content}],
             'stream': True, 'chat_id': chat_id, 'id': answer_id, 'session_id': 'r19finder-' + str(job['id']),
             'params': {'function_calling': 'native', 'max_tokens': MAX_OUTPUT_TOKENS},
-            'features': {'web_search': True, 'code_interpreter': False, 'image_generation': False, 'memory': False},
+            'features': {'web_search': web_enabled, 'code_interpreter': False, 'image_generation': False, 'memory': False},
             'background_tasks': {'title_generation': False, 'tags_generation': False, 'follow_up_generation': False},
         })
         # Bound the native provider loop as well as our outer research rounds.
         while True:
-            if time.monotonic() >= deadline:
+            if (is_cancelled and is_cancelled()) or time.monotonic() >= deadline:
                 try:
                     tasks = api_json(client, 'GET', 'api/tasks/chat/' + quote(chat_id, safe=''))
                     for task_id in tasks.get('task_ids', []):

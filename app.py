@@ -17,6 +17,9 @@ from search import create_search_blueprint
 from listings import public_url, listing_key, blacklist_part
 from psycopg.types.json import Jsonb
 from scheduling import DAYS, LISBON
+from language_settings import create_settings_blueprint, get_preferences, LANGUAGES
+from part_profile import FIELDS, GROUPS, FIELD_MAP, manual_profile
+from part_drafts import create_part_blueprint
 from cars import create_cars_blueprint, resolve_car, CAR_QUERY
 
 app = Flask(__name__)
@@ -102,6 +105,8 @@ def validate_csrf():
         abort(400, description='The form has expired. Refresh the page and try again.')
 
 
+app.register_blueprint(create_settings_blueprint(lambda: connect(), validate_csrf))
+app.register_blueprint(create_part_blueprint(lambda: connect(), validate_csrf, normalize_photo))
 app.register_blueprint(create_ai_blueprint(lambda: connect(), validate_csrf))
 app.register_blueprint(create_discord_blueprint(lambda: connect(), validate_csrf))
 app.register_blueprint(create_search_blueprint(lambda: connect(), validate_csrf))
@@ -112,9 +117,18 @@ app.register_blueprint(create_cars_blueprint(lambda: connect(), validate_csrf,
 def request_form(**context):
     with connect() as conn:
         context['cars'] = conn.execute('SELECT id, name FROM cars ORDER BY name, id').fetchall()
+        context['language_preferences'] = get_preferences(conn)
+        context['language_names'] = LANGUAGES
+        context['part_models'] = conn.execute("SELECT models FROM ai_connections WHERE provider='openwebui'").fetchone()['models']
     order = context.get('order') or {}
     context['selected_car_id'] = (request.form.get('car_id', '') if request.method == 'POST'
                                   else str(order.get('car_id') or request.args.get('car_id', '')))
+    context.update(part_fields=FIELDS, part_groups=GROUPS, part_codex_models=cached_codex_models())
+    context['part_profile'] = context.get('part_profile', order.get('part_profile', {}))
+    if request.method == 'POST' and 'part_profile' not in request.form:
+        # Re-render even invalid values so a validation error never erases typed details.
+        context['part_profile'] = {'facts': [dict(id=str(uuid.uuid4()), field=key, value=value)
+            for key in FIELD_MAP for value in request.form.getlist('part_' + key) if value.strip()]}
     return render_template('new.html', **context)
 
 
@@ -133,6 +147,7 @@ def create_request():
     uploads = [f for f in request.files.getlist('photos') if f.filename]
     try:
         validate_fields(description, vehicle)
+        profile = manual_profile(request.form)
         if len(uploads) > 6:
             raise ValueError('Add up to 6 photos per request.')
         photos = [normalize_photo(upload) for upload in uploads]
@@ -142,8 +157,8 @@ def create_request():
         return request_form(error=str(error), description=description, vehicle=vehicle), 400
     order_id = uuid.uuid4()
     with connect() as conn:
-        conn.execute('INSERT INTO requests (id, description, vehicle, car_id) VALUES (%s, %s, %s, %s)',
-                     (order_id, description, car['name'] if car else vehicle, car['id'] if car else None))
+        conn.execute('INSERT INTO requests (id, description, vehicle, car_id, part_profile) VALUES (%s, %s, %s, %s, %s)',
+                     (order_id, description, car['name'] if car else vehicle, car['id'] if car else None, Jsonb(profile)))
         for position, data in enumerate(photos):
             conn.execute('INSERT INTO photos (id, request_id, content_type, data, position) VALUES (%s, %s, %s, %s, %s)',
                          (uuid.uuid4(), order_id, 'image/jpeg', data, position))
@@ -176,6 +191,9 @@ def edit_request(order_id):
         remaining = [photo for photo in photos if str(photo['id']) not in removed]
         try:
             validate_fields(description, vehicle)
+            profile = manual_profile(request.form, order.get('part_profile', {}))
+            if request.form.get('profile_revision') is not None and request.form['profile_revision'] != str(order['profile_revision']):
+                raise ValueError('This part changed in another tab. Reload before editing.')
             car = resolve_car(conn, request.form.get('car_id', ''))
             if not removed.issubset({str(photo['id']) for photo in photos}):
                 raise ValueError('One of the photos no longer belongs to this request. Refresh the page.')
@@ -185,8 +203,8 @@ def edit_request(order_id):
         except ValueError as error:
             return request_form(order=order, photos=photos, removed=removed,
                                    description=description, vehicle=vehicle, error=str(error)), 400
-        conn.execute('UPDATE requests SET description=%s, vehicle=%s, car_id=%s WHERE id=%s',
-                     (description, car['name'] if car else vehicle, car['id'] if car else None, order_id))
+        conn.execute('UPDATE requests SET description=%s, vehicle=%s, car_id=%s, part_profile=%s, profile_revision=profile_revision+1 WHERE id=%s',
+                     (description, car['name'] if car else vehicle, car['id'] if car else None, Jsonb(profile), order_id))
         for photo in photos:
             if str(photo['id']) in removed:
                 conn.execute('DELETE FROM photos WHERE id=%s AND request_id=%s', (photo['id'], order_id))
@@ -221,7 +239,7 @@ def detail(order_id):
                 seen_urls.add(listing_key(listing['url']))
                 found_parts.append(dict(listing, found_at=search['finished_at'] or search['created_at'],
                                        provider=search['provider']))
-    return render_template('detail.html', order=order, photos=photos, searches=searches, found_parts=found_parts, blacklist=blacklist,
+    return render_template('detail.html', part_field_map=FIELD_MAP, order=order, photos=photos, searches=searches, found_parts=found_parts, blacklist=blacklist,
                            models=connection['models'], codex_models=cached_codex_models(), schedules=schedules, weekdays=DAYS, lisbon=LISBON, car=car,
                            discord_config=discord_config, active_search=any(s['status'] in {'queued', 'running'} for s in searches))
 

@@ -1,12 +1,13 @@
 {% extends 'base.html' %}
 {% from 'components/ui.html' import icon, heading %}
-{% block title %}{{ 'Edit request' if order else 'New request' }}{% endblock %}
+{% block title %}{{ 'Edit request' if order else 'New part' }}{% endblock %}
 {% block content %}
 <a href="{{ url_for('detail', order_id=order.id) if order else url_for('index') }}" class="breadcrumb">{{ icon('back', 16) }}{{ 'Back to request' if order else 'Back to requests' }}</a>
-{{ heading('', 'Edit request' if order else 'New request') }}
+{{ heading('', 'Edit request' if order else 'New part') }}
 <div class="form-layout">
-<form action="{{ url_for('edit_request', order_id=order.id) if order else url_for('create_request') }}" method="post" enctype="multipart/form-data" class="panel" data-submit-state>
+<form action="{{ url_for('edit_request', order_id=order.id) if order else url_for('create_request') }}" method="post" enctype="multipart/form-data" class="panel" data-part-form data-request-id="{{ order.id if order else '' }}">
   <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <div data-resume-draft hidden class="notice"><p>A saved draft is available in this browser session.</p><button type="button" class="btn btn-secondary" data-resume>Resume draft</button><button type="button" class="btn btn-quiet" data-discard-resume>Start fresh</button></div>
   {% if error %}<p role="alert" tabindex="-1" class="mb-5 rounded-lg bg-red-950 p-4 text-sm text-red-300">{{ error }} Select the photos again.</p>{% endif %}
   <section class="form-section"><h2 class="form-section-title">Vehicle</h2>
     <div class="field"><label for="car_id">Car profile <span class="text-gray-400">· optional</span></label><select id="car_id" name="car_id"><option value="">Enter vehicle details manually</option>{% for car in cars %}<option value="{{ car.id }}" {% if car.id|string == selected_car_id %}selected{% endif %}>{{ car.name }}</option>{% endfor %}</select><p class="help-text">Saved specifications are included in every search. <a href="{{ url_for('cars.edit') }}" class="text-blue-400 underline">Add a car</a></p></div>
@@ -17,8 +18,12 @@
     {% if photos %}<fieldset class="mb-5"><legend class="mb-3 text-sm">Current photos</legend><div class="grid grid-cols-2 gap-3 sm:grid-cols-3">{% for photo in photos %}<label class="rounded-lg border border-gray-700 p-2 text-xs"><img src="{{ url_for('photo', photo_id=photo.id) }}" alt="Photo {{ loop.index }}" class="mb-3 h-28 w-full rounded object-contain"><input type="checkbox" name="remove_photos" value="{{ photo.id }}" {% if photo.id|string in removed|default([]) %}checked{% endif %}>Remove photo {{ loop.index }}</label>{% endfor %}</div><p class="help-text">Unchecked photos stay in this request.</p></fieldset>{% endif %}
     <div class="upload-area"><label for="photos">{{ icon('image', 20) }}{{ 'Add more photos' if order else 'Drop your photos here' }}</label><input id="photos" name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="photos-help" data-photo-preview data-max-files="6" data-max-size="5"><p id="photos-help" class="help-text">JPG, PNG or WebP · up to 6 photos total · 5 MB each.</p><div class="upload-preview" data-previews></div><p class="upload-summary" data-upload-summary role="status"></p></div>
   </section>
-  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 17) }}{{ 'Save changes' if order else 'Save request' }}</button><a href="{{ url_for('detail', order_id=order.id) if order else url_for('index') }}" class="btn btn-quiet">Cancel</a></div><p class="help-text">Saving a request does not start an AI search.</p>
+  {% include 'components/part_profile_form.html' %}
+  <div data-draft-photos></div>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 17) }}{{ 'Save changes' if order else 'Create part' }}</button><a href="{{ url_for('detail', order_id=order.id) if order else url_for('index') }}" class="btn btn-quiet">Cancel</a></div><p class="help-text">Saving a request does not start an AI search.</p>
 </form>
 
 </div>
 {% endblock %}
+
+{% block scripts %}<script src="{{ url_for('static', filename='part-profile-merge.js') }}" defer></script><script src="{{ url_for('static', filename='part-profile.js') }}" defer></script>{% endblock %}

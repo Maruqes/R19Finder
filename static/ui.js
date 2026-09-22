@@ -112,7 +112,7 @@ for (const input of document.querySelectorAll('[data-photo-preview]')) {
   const validate = () => {
     const files = [...input.files];
     const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-    const existing = input.form.querySelectorAll('[name=remove_photos]:not(:checked)').length;
+    const existing = input.form.querySelectorAll('[name=remove_photos]:not(:checked):not(:disabled), [name=remove_draft_photos]:not(:checked)').length;
     let error = '';
     if (input.dataset.maxFiles && files.length + existing > Number(input.dataset.maxFiles)) {
       error = `This request supports ${input.dataset.maxFiles} photos in total. Remove existing photos or choose fewer files.`;

@@ -9,6 +9,7 @@
   {% if car %}<p class="help-text mt-3">{{ icon('car', 15) }} Car profile: <a href="{{ url_for('cars.detail', car_id=car.id) }}" class="text-blue-400 underline">{{ car.name }}</a> · Technical specifications included in new searches.</p>{% endif %}
   {% if photos %}<details class="mt-4"><summary class="text-xs text-gray-400">Reference photos · {{ photos|length }}</summary><div class="request-photos grid grid-cols-2 gap-3 sm:grid-cols-3">{% for photo in photos %}<a href="{{ url_for('photo', photo_id=photo.id) }}" target="_blank" rel="noopener"><img class="w-full rounded-lg bg-gray-950 object-contain" src="{{ url_for('photo', photo_id=photo.id) }}" alt="Photo {{ loop.index }} of the part" loading="lazy"></a>{% endfor %}</div></details>{% endif %}
 </article>
+{% set profile = order.part_profile %}{% include 'components/part_profile_detail.html' %}
 {% include 'parts_found.html' %}
 <section id="research" class="panel mt-8 space-y-5">
   <div>
@@ -126,6 +127,8 @@
   <div class="flex items-center justify-between gap-3"><h2 class="text-xl font-bold">Search history</h2><form action="{{ url_for('detail', order_id=order.id, _anchor='research') }}" method="get"><button type="submit" class="text-sm text-blue-400 hover:underline">Refresh status</button></form></div>
   {% for search in searches %}
   <article data-search-id="{{ search.id }}" data-status="{{ search.status }}" class="panel history-card space-y-3">
+    {% if search.part_profile %}<details><summary>Part details used in this search</summary>{% set profile = search.part_profile %}{% include 'components/part_profile_detail.html' %}</details>{% endif %}
+    {% if search.language_preferences %}<p class="help-text">AI response: {{ search.language_preferences.response_language|upper }} · Search languages: {{ search.language_preferences.search_languages|join(', ')|upper }}</p>{% endif %}
     <h3 class="break-words font-semibold">{{ 'Codex CLI · ' ~ (search.model or 'Default model') if search.provider == 'codex' else 'Open WebUI · ' ~ search.model }}</h3>
     <p class="flex flex-wrap items-center gap-3 text-xs text-gray-400">{{ search.created_at.strftime('%d/%m/%Y %H:%M') }} UTC <span class="badge badge-{{ search.status }}">{{ search.status|capitalize }}</span></p>
     <details class="history-body" {% if search.status in ['queued', 'running', 'failed'] %}open{% endif %}><summary>View search report{% if search.listings %} · {{ search.listings|length }} new listing(s){% endif %}</summary><div class="space-y-3">

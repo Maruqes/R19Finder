@@ -2,6 +2,7 @@
 import json
 import time
 
+from language_settings import language_context
 from listings import exclusion_keys, listing_key, parse_research, public_url, remove_excluded_links
 
 MAX_ROUNDS = 3
@@ -67,9 +68,14 @@ def run_research(job, run_round, refresh_exclusions, save_progress):
                              'excluded_count': len(round_exclusions),
                              'exclusions_omitted': len(round_exclusions) - len(compact),
                              'max_search_queries': 6, 'max_listing_pages': 8,
+                             'query_languages': language_context(job.get('language_preferences'))['search_language_names'],
+                             'language_strategy': 'Use at least one targeted query per selected language, up to this round budget; rotate order in later rounds. Include the specific part variant and known identifiers.',
                              'output_token_target': MAX_OUTPUT_TOKENS,
                          },
                          round_timeout_seconds=min(ROUND_SECONDS, TOTAL_SECONDS - elapsed))
+        languages = round_job['research_round']['query_languages']
+        offset = index % len(languages)
+        round_job['research_round']['query_languages'] = languages[offset:] + languages[:offset]
         save_progress({'rounds': rounds, 'current_round': index + 1, 'max_rounds': MAX_ROUNDS,
                        'new_listings': len(listings), 'reported_tokens': tokens})
         try:
@@ -133,7 +139,13 @@ def run_research(job, run_round, refresh_exclusions, save_progress):
                                    item['visual_status'] == 'compared'), reverse=True)
     summary = remove_excluded_links('\n\n'.join(summaries), blocked)
     if not listings:
-        summary = 'No new eligible listings found. Existing and blocked listings were excluded.\n\n' + summary
+        language = language_context(job.get('language_preferences'))['response_language']
+        empty = {'en': 'No new eligible listings found. Existing and blocked listings were excluded.',
+                 'pt': 'Não foram encontrados novos anúncios elegíveis. Os anúncios já encontrados ou bloqueados foram excluídos.',
+                 'fr': 'Aucune nouvelle annonce admissible trouvée. Les annonces déjà trouvées ou bloquées ont été exclues.',
+                 'de': 'Keine neuen geeigneten Angebote gefunden. Bereits gefundene oder gesperrte Angebote wurden ausgeschlossen.',
+                 'es': 'No se encontraron nuevos anuncios válidos. Se excluyeron los anuncios ya encontrados o bloqueados.'}
+        summary = empty[language] + '\n\n' + summary
     meta = {'rounds': rounds, 'max_rounds': MAX_ROUNDS, 'new_listings': len(listings),
             'reported_tokens': tokens, 'usage_complete': usage_complete, 'token_budget': TOKEN_BUDGET,
             'stop_reason': stop_reason}

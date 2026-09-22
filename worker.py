@@ -8,6 +8,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from worker_locks import AI_GENERATION
 from search import run_codex, run_openwebui
 from listings import excluded_for_request, exclusion_keys, listing_key, remove_excluded_links
 from research_loop import run_research
@@ -95,10 +96,16 @@ def main():
                 WHERE status='running'""")
         while True:
             lock.execute('SELECT 1')
-            job = claim_job()
-            if job:
-                process_job(job)
-            else:
+            if not lock.execute('SELECT pg_try_advisory_lock(%s) AS acquired', (AI_GENERATION,)).fetchone()['acquired']:
+                time.sleep(2)
+                continue
+            try:
+                job = claim_job()
+                if job:
+                    process_job(job)
+            finally:
+                lock.execute('SELECT pg_advisory_unlock(%s)', (AI_GENERATION,))
+            if not job:
                 time.sleep(2)
 
 

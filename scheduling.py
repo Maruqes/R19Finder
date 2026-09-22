@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 import uuid
 
 from psycopg.types.json import Jsonb
+from language_settings import get_preferences
 from listings import excluded_for_request
 
 LISBON = ZoneInfo('Europe/Lisbon')
@@ -30,12 +31,12 @@ def enqueue_search(conn, order, settings, schedule_id=None, discord_notify=False
     car_profile = dict(car['specs'], name=car['name']) if car else {}
     excluded = excluded_for_request(conn, order['id'])
     conn.execute('''INSERT INTO searches (id, request_id, provider, model, instructions, vehicle, description,
-        preferred_price, pickup_areas, shipping_areas, reasoning_effort, preferred_options, priority_websites, schedule_id, car_profile, excluded_listings, discord_notify)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+        preferred_price, pickup_areas, shipping_areas, reasoning_effort, preferred_options, priority_websites, schedule_id, car_profile, excluded_listings, discord_notify, part_profile, language_preferences)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
         (search_id, order['id'], settings['provider'], settings['model'], settings['instructions'],
          car['name'] if car else order['vehicle'], order['description'], settings['preferred_price'], settings['pickup_areas'],
          settings['shipping_areas'], settings['reasoning_effort'], settings['preferred_options'],
-         Jsonb(settings['priority_websites']), schedule_id, Jsonb(car_profile), Jsonb(excluded), bool(schedule_id and discord_notify)))
+         Jsonb(settings['priority_websites']), schedule_id, Jsonb(car_profile), Jsonb(excluded), bool(schedule_id and discord_notify), Jsonb(order.get('part_profile', {})), Jsonb(get_preferences(conn))))
     conn.execute('''INSERT INTO search_photos (search_id, position, data)
         SELECT %s, position, data FROM photos WHERE request_id=%s''', (search_id, order['id']))
     return search_id

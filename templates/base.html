@@ -1,13 +1,13 @@
 {% from 'components/ui.html' import icon %}
 {% set endpoint = request.endpoint or '' %}
-{% set section = 'cars' if endpoint.startswith('cars.') else 'websites' if endpoint == 'websites' else 'ai' if endpoint.startswith('ai.') else 'discord' if endpoint.startswith('discord.') else 'requests' %}
+{% set section = 'settings' if endpoint.startswith('preferences.') else 'cars' if endpoint.startswith('cars.') else 'websites' if endpoint == 'websites' else 'ai' if endpoint.startswith('ai.') else 'discord' if endpoint.startswith('discord.') else 'requests' %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111113">
-  <title>{% block title %}{{ {'cars': 'Your cars', 'websites': 'Search sources', 'ai': 'AI connections', 'discord': 'Discord', 'requests': 'Part requests'}[section] }}{% endblock %} · R19 Finder</title>
+  <title>{% block title %}{{ {'settings': 'Settings', 'cars': 'Your cars', 'websites': 'Search sources', 'ai': 'AI connections', 'discord': 'Discord', 'requests': 'Part requests'}[section] }}{% endblock %} · R19 Finder</title>
   <meta name="description" content="Car profiles, part requests and search results.">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -18,7 +18,7 @@
     <a href="{{ url_for('index') }}" class="brand" aria-label="R19 Finder home">R19<span>Finder</span></a>
     <a href="{{ url_for('new_request') }}" class="btn btn-primary sidebar-create">{{ icon('plus', 16) }}New request</a>
     <nav class="primary-nav" aria-label="Main navigation">
-      {% for key, route, label, glyph in [('requests', 'index', 'Requests', 'part'), ('cars', 'cars.index', 'Cars', 'car'), ('websites', 'websites', 'Sources', 'globe'), ('ai', 'ai.settings', 'AI connections', 'settings'), ('discord', 'discord.settings', 'Discord', 'chat')] %}
+      {% for key, route, label, glyph in [('requests', 'index', 'Requests', 'part'), ('cars', 'cars.index', 'Cars', 'car'), ('websites', 'websites', 'Sources', 'globe'), ('ai', 'ai.settings', 'AI connections', 'settings'), ('discord', 'discord.settings', 'Discord', 'chat'), ('settings', 'preferences.settings', 'Settings', 'settings')] %}
       <a href="{{ url_for(route) }}" class="nav-link {{ 'is-active' if section == key }}" {% if section == key %}aria-current="page"{% endif %}>{{ icon(glyph) }}<span>{{ label }}</span></a>
       {% endfor %}
     </nav>
@@ -31,5 +31,6 @@
   </div>
   <script src="{{ url_for('static', filename='ui.js') }}" defer></script>
   <script src="{{ url_for('static', filename='car-gallery.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

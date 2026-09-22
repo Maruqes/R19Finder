@@ -161,3 +161,49 @@ CREATE TABLE IF NOT EXISTS discord_confirmations (
     expires_at TIMESTAMPTZ NOT NULL DEFAULT now() + interval '5 minutes',
     used_at TIMESTAMPTZ
 );
+
+-- Optional technical facts; old requests retain an empty profile.
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS part_profile JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS profile_revision INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS part_profile JSONB NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS part_drafts (
+    id UUID PRIMARY KEY, owner TEXT NOT NULL, request_id UUID REFERENCES requests(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL DEFAULT 0, content JSONB NOT NULL DEFAULT '{}',
+    created_request_id UUID REFERENCES requests(id) ON DELETE CASCADE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS part_draft_photos (
+    id UUID PRIMARY KEY, draft_id UUID NOT NULL REFERENCES part_drafts(id) ON DELETE CASCADE,
+    position SMALLINT NOT NULL, data BYTEA NOT NULL
+);
+CREATE TABLE IF NOT EXISTS part_enrichments (
+    id UUID PRIMARY KEY, draft_id UUID NOT NULL REFERENCES part_drafts(id) ON DELETE CASCADE,
+    draft_revision INTEGER NOT NULL, idempotency_key UUID NOT NULL,
+    provider TEXT NOT NULL CHECK (provider IN ('codex','openwebui')), model TEXT NOT NULL,
+    reasoning_effort TEXT NOT NULL DEFAULT '', input JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','completed','failed','cancelled')),
+    output JSONB NOT NULL DEFAULT '{}', error TEXT NOT NULL DEFAULT '', remote_url TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(), started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ,
+    UNIQUE (draft_id, idempotency_key)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_part_enrichment_active ON part_enrichments(draft_id) WHERE status IN ('queued','running');
+CREATE TABLE IF NOT EXISTS part_enrichment_photos (
+    run_id UUID NOT NULL REFERENCES part_enrichments(id) ON DELETE CASCADE,
+    position SMALLINT NOT NULL, data BYTEA NOT NULL, PRIMARY KEY(run_id, position)
+);
+
+ALTER TABLE part_enrichments ADD COLUMN IF NOT EXISTS stage TEXT NOT NULL DEFAULT 'queued';
+ALTER TABLE part_enrichments ADD COLUMN IF NOT EXISTS progress_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS worker_heartbeats (
+    name TEXT PRIMARY KEY,
+    seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS language_preferences (
+    id SMALLINT PRIMARY KEY CHECK (id=1),
+    response_language TEXT NOT NULL DEFAULT 'en' CHECK (response_language IN ('en','pt','fr','de','es')),
+    search_languages JSONB NOT NULL DEFAULT '["en","pt","fr","de","es"]'
+);
+INSERT INTO language_preferences(id) VALUES(1) ON CONFLICT DO NOTHING;
+ALTER TABLE searches ADD COLUMN IF NOT EXISTS language_preferences JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE part_enrichments ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'profile';
