@@ -1,0 +1,42 @@
+{
+  "name": "r19finder-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "tsc -b && vite build",
+    "check": "tsc -b",
+    "test": "node --test tests/*.js",
+    "format": "prettier --write src vite.config.ts playwright.config.ts e2e",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource-variable/geist": "^5.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "get-nonce": "^1.0.1",
+    "lucide-react": "^0.468.0",
+    "motion": "^12.23.0",
+    "radix-ui": "^1.4.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.3.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.55.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "prettier": "^3.9.8",
+    "tailwindcss": "^4.1.0",
+    "tw-animate-css": "^1.3.0",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.0"
+  }
+}

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111212">
+  <meta name="description" content="Your garage, part requests and research in one place.">
+  <title>R19 Finder · Your parts workspace</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  {% for css in entry.get('css', []) %}<link rel="stylesheet" href="/static/app/{{ css }}">{% endfor %}
+</head>
+<body>
+  <div id="root"></div>
+  <script id="page-data" type="application/json">{{ payload|tojson }}</script>
+  <script type="module" src="/static/app/{{ entry.file }}"></script>
+  <noscript>This application requires JavaScript. Enable JavaScript to manage your cars and part requests.</noscript>
+</body>
+</html>

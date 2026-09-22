@@ -1,4 +1,4 @@
-.PHONY: up down remove codex-login
+.PHONY: up down remove codex-login test test-api test-frontend
 
 up:
 	docker compose up --build -d
@@ -12,3 +12,13 @@ remove:
 
 codex-login:
 	docker compose exec web codex -c 'cli_auth_credentials_store="file"' login --device-auth
+
+test: test-api test-frontend
+
+test-api:
+	docker compose run --rm --no-deps -T \
+		-v "$(CURDIR)/api/tests:/app/api/tests:ro,Z" \
+		web python -m unittest discover -s /app/api/tests
+
+test-frontend:
+	$(MAKE) -C frontend test

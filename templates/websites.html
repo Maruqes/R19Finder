@@ -1,9 +1,0 @@
-{% extends 'base.html' %}
-{% from 'components/ui.html' import icon, heading %}
-{% block content %}
-{{ heading('', 'Search sources', 'Checked in order, before searching the rest of the web.') }}
-<div class="form-layout"><section class="panel"><div class="section-header"><h2>Priority websites</h2><span class="badge">Codex + Open WebUI</span></div>
-{% if error %}<p role="alert" tabindex="-1" class="mb-5 rounded-lg bg-red-950 p-4 text-sm text-red-300">{{ error }}</p>{% endif %}
-<form method="post" data-submit-state><input type="hidden" name="csrf" value="{{ csrf_token }}"><div class="field"><label for="urls">One website per line, in priority order</label><textarea id="urls" name="urls" rows="8" maxlength="65000" placeholder="https://www.example.com" spellcheck="false" aria-describedby="websites-help">{{ urls }}</textarea><p id="websites-help" class="help-text">Up to 30 public websites. Move a line up to check that website sooner.</p></div><div class="form-actions"><button class="btn btn-primary" type="submit">{{ icon('check', 17) }}Save websites</button><span class="text-xs text-gray-400">Applies to new searches. Re-save schedules to update their sources.</span></div></form></section>
-</div>
-{% endblock %}

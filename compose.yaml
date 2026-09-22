@@ -1,6 +1,11 @@
+# Keep a stable project name for the existing named volumes.
+name: r19finder
+
 services:
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     network_mode: host
     environment:
       DATABASE_URL: postgresql://r19finder:${POSTGRES_PASSWORD:-local-development-password}@127.0.0.1:${POSTGRES_PORT:-5433}/r19finder
@@ -49,7 +54,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro,Z
+      - ./api/db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro,Z
     healthcheck:
       test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "${POSTGRES_PORT:-5433}", "-U", "r19finder", "-d", "r19finder"]
       interval: 5s

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-22T14:00:00Z",
+  "title": "Design System: R19 Finder",
+  "extensions": {
+    "shadows": [{"name":"popover","value":"0 16px 50px #0006","purpose":"Elevated menus and confirmation dialogs."}],
+    "motion": [{"name":"gallery-change","value":"180ms ease-out","purpose":"Photo changes; zero duration for reduced motion."},{"name":"gallery-interval","value":"5000ms","purpose":"Optional gallery rotation, paused by interaction and document visibility."}],
+    "breakpoints": [{"name":"small-phone","value":"420px"},{"name":"navigation-collapse","value":"760px"},{"name":"stack-columns","value":"1000px"},{"name":"compact-desktop","value":"1250px"},{"name":"wide-desktop","value":"1600px"}]
+  },
+  "components": [
+    {"name":"Primary button","kind":"button","refersTo":"button-primary","description":"Primary save and create actions.","html":"<button class=\"primary\">Create part request</button>","css":".primary{background:var(--primary);color:var(--primary-foreground);min-height:40px;border:0;border-radius:8px;padding:8px 16px;font:550 13px 'Geist Variable',sans-serif}.primary:focus-visible{outline:2px solid var(--ring);outline-offset:4px}"},
+    {"name":"Field","kind":"input","description":"Labeled input with a visible focus treatment.","html":"<label class=\"field\">Vehicle name<input placeholder=\"Renault 19 Chamade\"></label>","css":".field{display:grid;gap:8px;font:500 13px 'Geist Variable',sans-serif;color:var(--foreground)}.field input{background:var(--background);border:1px solid var(--input);color:var(--foreground);border-radius:8px;padding:10px 12px;font:400 14px 'Geist Variable',sans-serif}.field input:focus-visible{outline:2px solid var(--ring);outline-offset:2px}"},
+    {"name":"Research status","kind":"chip","description":"State always includes a written label.","html":"<span class=\"status\"><span></span>Results ready</span>","css":".status{display:inline-flex;align-items:center;gap:6px;padding:4px 7px;border-radius:6px;background:var(--muted);color:var(--success);font:400 10px 'Geist Variable',sans-serif}.status span{width:5px;height:5px;border-radius:50%;background:currentColor}"}
+  ],
+  "narrative": {
+    "northStar":"A clear dark workspace for finding the part that fits.",
+    "overview":"The interface keeps part descriptions, technical evidence and vehicle context easy to scan. Charcoal layers and restrained orange actions preserve the user's dark-only direction.",
+    "keyCharacteristics":["Dark throughout","Full-frame reference photography","Compact research states","Reviewed AI suggestions"],
+    "rules":[{"name":"Evidence before certainty","body":"Keep AI suggestions and unverified seller details explicitly labeled.","section":"components"}],
+    "dos":["Use the shared shadcn primitives and semantic tokens.","Preserve the complete proportions of user photos.","Respect reduced motion."],
+    "donts":["Do not fabricate listings or vehicle data.","Do not use decorative page-load animation."]
+  }
+}

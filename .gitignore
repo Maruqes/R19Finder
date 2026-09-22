@@ -20,9 +20,9 @@ htmlcov/
 
 # Frontend dependencies and generated Tailwind CSS
 node_modules/
-/static/style.css
+/frontend/static/style.css
 
-# Local database data and backups (keep db/init.sql tracked)
+# Local database data and backups (keep api/db/init.sql tracked)
 /postgres_data/
 /backups/
 *.dump
@@ -34,3 +34,9 @@ node_modules/
 *~
 .DS_Store
 Thumbs.db
+
+# React build output and browser reports
+/frontend/static/app/
+/frontend/test-results/
+/frontend/playwright-report/
+*.tsbuildinfo

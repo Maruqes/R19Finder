@@ -1,7 +1,0 @@
-{% extends 'base.html' %}
-{% from 'components/ui.html' import icon, heading, empty %}
-{% block content %}
-<div class="page-header-row">{{ heading('', 'Cars') }}<a href="{{ url_for('cars.edit') }}" class="btn btn-primary">{{ icon('plus', 17) }}Add car</a></div>
-{% if cars %}<div class="garage-toolbar"><span class="text-xs text-gray-400" data-garage-count role="status">{{ cars|length }} car{{ '' if cars|length == 1 else 's' }} in your garage</span><div class="search-tools"><label for="garage-filter" class="sr-only">Find a car</label><input id="garage-filter" type="search" placeholder="Find a car…" data-garage-filter></div></div><div class="grid gap-6 xl:grid-cols-3 sm:grid-cols-2" data-garage-grid>{% for car in cars %}{% include 'components/car_card.html' %}{% endfor %}</div><p class="empty-state" data-garage-empty hidden>No matching cars.</p>
-{% else %}{% call empty('car', 'No cars', '') %}<a href="{{ url_for('cars.edit') }}" class="btn btn-primary">{{ icon('plus', 17) }}Add car</a>{% endcall %}{% endif %}
-{% endblock %}

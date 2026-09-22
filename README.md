@@ -1,6 +1,6 @@
 # R19 Finder
 
-A simple application for managing car part requests. Built with Python, Flask, server-rendered HTML, Tailwind CSS and PostgreSQL. The interface is in English with dark mode enabled by default. Everything runs with Docker Compose.
+A simple application for managing car part requests. Built with a React 19 and shadcn/ui frontend, TypeScript, Tailwind CSS, Python/Flask and PostgreSQL. The interface is in English with dark mode enabled by default. Everything runs with Docker Compose.
 
 ## Features
 
@@ -21,6 +21,8 @@ Requirements: Docker, Docker Compose and Make. The Compose configuration uses ho
 ```sh
 make up
 ```
+
+Run the commands below from the repository root.
 
 Open **http://localhost:8000**. To use another port:
 
@@ -229,19 +231,37 @@ All volumes persist with `make down`. Include all three in backups. Losing `app_
 
 ## Project structure
 
-- `app.py`: request routes, validation, transactions and PostgreSQL access.
-- `ai.py`: AI configuration, key encryption and connection checks.
-- `search.py`: research routes, prompts, Codex execution and Open WebUI tool calling.
-- `worker.py`: background research queue backed by PostgreSQL; processes one search at a time.
-- `init_db.py`: prepares the encryption key and applies the schema before starting the web workers.
-- `db/init.sql`: idempotent schema, also applied to existing database volumes. Future column changes require migrations.
-- `templates/`: server-rendered HTML with Tailwind classes; small vanilla JavaScript controls model options and history polling.
-- `scheduling.py`: shared queue insertion and weekly Lisbon-time scheduling.
-- `scheduler.py`: independent scheduler loop, with PostgreSQL locking to prevent duplicate dispatch.
-- `static/input.css`: Tailwind input, compiled during the Docker build without a browser CDN dependency.
-- `Dockerfile`: builds Tailwind, installs Codex CLI and runs Flask using Gunicorn as a non-root user.
-- `compose.yaml`: application, research worker, weekly scheduler and PostgreSQL 17 services, host networking and persistent volumes.
-- `tests/`: integration tests for requests and AI connections.
+Paths below are relative to the repository root:
+
+```text
+api/
+  src/             Flask routes, business logic, integrations and background workers
+  db/              PostgreSQL schema and additive migrations
+  tests/           Python unit and integration tests
+  docs/            Architecture, workflows and implementation notes
+  requirements.txt Python dependencies
+frontend/
+  src/             React pages, shadcn components, styles and typed helpers
+  templates/       React HTML entry point
+  static/          Built React assets and favicon
+  tests/           JavaScript merge tests
+  e2e/             Browser integration and accessibility tests
+  package.json     React dependencies and build/watch commands
+  Makefile         Frontend check, test and build commands
+  README.md        Frontend structure and development notes
+Dockerfile         Application image, including the React production build
+compose.yaml       Application services and PostgreSQL
+Makefile           Service management and test commands
+.dockerignore      Docker build exclusions
+.env.example       Configuration example
+README.md          Application setup and usage
+```
+
+Flask serves the React entry point with a safely escaped page-data payload and resolves hashed assets through the Vite manifest. React renders every screen; existing form actions, CSRF checks and URLs are preserved. Frontend paths resolve from the source file location, so asset loading does not depend on the working directory. Public URLs, including `/static/`, stay the same. `api/src/init_db.py` likewise resolves `api/db/init.sql` from its own location.
+
+`compose.yaml` uses the repository root as its build context and keeps the Compose project name `r19finder`, preserving the existing named volumes. If you previously used a custom project name, continue passing the same `-p` option or `COMPOSE_PROJECT_NAME`.
+
+Shared build, service configuration and project documentation live at the root. Backend and frontend files live under `api/` and `frontend/`.
 
 ## Routes
 
@@ -264,13 +284,15 @@ URLs are now in English. Update any bookmarks that used the previous Portuguese 
 
 ## Tests
 
-With the containers running:
+With the containers running, from the repository root:
 
 ```sh
-docker compose exec -T web python - < tests/test_app.py
-docker compose exec -T web python - < tests/test_ai.py
-docker compose exec -T web python - < tests/test_search.py
+make test-api
 ```
+
+Run all tests with `make test` (requires Node.js and `npm --prefix frontend ci`). See [frontend development and browser tests](frontend/README.md) for the local watch workflow and isolated browser suite. Use `make test-api` or `make test-frontend` to run each suite separately.
+
+For local Python development, install `api/requirements.txt` in a virtual environment and export `DATABASE_URL` and `SECRET_KEY`. With an initialized test database, run `PYTHONPATH=src python -m unittest discover -s tests` from `api/`.
 
 Database changes made by tests are rolled back. AI tests use mocks and a local HTTP fixture, so they do not require provider credentials or perform paid inference.
 
