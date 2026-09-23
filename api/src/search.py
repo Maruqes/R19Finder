@@ -314,13 +314,12 @@ def api_json(client, method, path, **kwargs):
 
 
 def run_openwebui(job, photos, connection, save_remote, *, system_prompt=None, input_text=None, require_web=True, is_cancelled=None):
-    deadline = time.monotonic() + job.get('round_timeout_seconds', ROUND_SECONDS)
     if job['model'] not in check_openwebui(connection):
         raise ValueError('The selected model is no longer available. Refresh the model list and choose another.')
     key = cipher().decrypt(connection['api_key'].encode()).decode()
     with httpx.Client(base_url=connection['base_url'].rstrip('/') + '/',
                       headers={'Authorization': f'Bearer {key}'}, verify=False,
-                      follow_redirects=False, timeout=30) as client:
+                      follow_redirects=False, timeout=None) as client:
         config = api_json(client, 'GET', 'api/config')
         web_enabled = bool(config.get('features', {}).get('enable_web_search'))
         if require_web and not web_enabled:
@@ -358,9 +357,9 @@ def run_openwebui(job, photos, connection, save_remote, *, system_prompt=None, i
             'features': {'web_search': web_enabled, 'code_interpreter': False, 'image_generation': False, 'memory': False},
             'background_tasks': {'title_generation': False, 'tags_generation': False, 'follow_up_generation': False},
         })
-        # Bound the native provider loop as well as our outer research rounds.
+        # Wait for completion without an elapsed-time limit.
         while True:
-            if (is_cancelled and is_cancelled()) or time.monotonic() >= deadline:
+            if is_cancelled and is_cancelled():
                 try:
                     tasks = api_json(client, 'GET', 'api/tasks/chat/' + quote(chat_id, safe=''))
                     for task_id in tasks.get('task_ids', []):
@@ -369,8 +368,8 @@ def run_openwebui(job, photos, connection, save_remote, *, system_prompt=None, i
                             if stopped.get('status') is not True:
                                 raise ValueError('Remote cancellation was not confirmed.')
                 except (ValueError, httpx.RequestError):
-                    raise ValueError('Open WebUI reached the round time limit; remote cancellation could not be confirmed. Check the provider conversation.') from None
-                raise ValueError('Open WebUI research reached the round time limit. Remote task cancellation was requested.')
+                    raise ValueError('Open WebUI cancellation was requested; remote cancellation could not be confirmed. Check the provider conversation.') from None
+                raise ValueError('Open WebUI research cancelled. Remote task cancellation was requested.')
             data = api_json(client, 'GET', chat_path)
             answer = data.get('chat', {}).get('history', {}).get('messages', {}).get(answer_id, {})
             tasks = api_json(client, 'GET', 'api/tasks/chat/' + quote(chat_id, safe=''))

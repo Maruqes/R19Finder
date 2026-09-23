@@ -6,7 +6,6 @@ research retains its separate persisted, tool-enabled chat transport.
 import asyncio
 import base64
 import json
-import time
 
 import httpx
 
@@ -34,7 +33,7 @@ def run_openwebui_profile(job, photos, connection, is_cancelled, on_progress=Non
     async def complete():
         async with httpx.AsyncClient(base_url=connection['base_url'].rstrip('/') + '/',
             headers={'Authorization': 'Bearer ' + key}, verify=False, follow_redirects=False,
-            timeout=httpx.Timeout(300, connect=30)) as client:
+            timeout=None) as client:
             async with client.stream('POST', 'api/chat/completions', json=body) as response:
                 if response.status_code in {401, 403}:
                     raise ValueError('Open WebUI denied access. Check the API key and chat completion permissions.')
@@ -73,13 +72,10 @@ def run_openwebui_profile(job, photos, connection, is_cancelled, on_progress=Non
 
     async def run():
         task = asyncio.create_task(complete())
-        deadline = time.monotonic() + 300
         try:
             while not task.done():
                 if is_cancelled():
                     raise ValueError('AI fill cancelled. The remote model may continue processing.')
-                if time.monotonic() >= deadline:
-                    raise ValueError('AI fill reached its five-minute limit. The remote model may continue processing.')
                 await asyncio.wait({task}, timeout=1)
             return await task
         finally:

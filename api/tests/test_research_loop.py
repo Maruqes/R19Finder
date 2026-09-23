@@ -62,6 +62,15 @@ class ResearchLoopTests(unittest.TestCase):
         self.assertEqual(run.call_count, 1)
         self.assertIn('Time budget', result['research_meta']['stop_reason'])
 
+    def test_openwebui_continues_after_total_time_budget(self):
+        run = Mock(side_effect=[answer('https://seller.com/one'), answer('https://seller.com/two')])
+        with patch('research_loop.time.monotonic', side_effect=[0, 1801, 7200]):
+            result = run_research({'provider': 'openwebui', 'preferred_options': 2},
+                                  run, lambda: [], Mock())
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(len(result['listings']), 2)
+        self.assertIsNone(run.call_args.args[0]['round_timeout_seconds'])
+
     def test_no_web_evidence_does_not_trigger_more_calls(self):
         result, run = self.run_loop([answer(observed=False)])
         self.assertEqual(run.call_count, 1)

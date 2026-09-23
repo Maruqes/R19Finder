@@ -37,6 +37,7 @@ def research_notes(text):
 
 
 def run_research(job, run_round, refresh_exclusions, save_progress):
+    time_limited = job.get('provider') != 'openwebui'
     started = time.monotonic()
     listings, summaries, sources, notes, rounds = [], [], [], {}, []
     tokens, usage_complete, observed = 0, True, False
@@ -45,7 +46,7 @@ def run_research(job, run_round, refresh_exclusions, save_progress):
     excluded = job.get('excluded_listings', [])
     for index in range(MAX_ROUNDS):
         elapsed = time.monotonic() - started
-        if elapsed >= TOTAL_SECONDS:
+        if time_limited and elapsed >= TOTAL_SECONDS:
             stop_reason = 'Time budget reached.'
             break
         if tokens >= TOKEN_BUDGET:
@@ -73,7 +74,7 @@ def run_research(job, run_round, refresh_exclusions, save_progress):
                              'language_strategy': 'Use at least one targeted query per selected language, up to this round budget; rotate order in later rounds. Include the specific part variant and known identifiers.',
                              'output_token_target': MAX_OUTPUT_TOKENS,
                          },
-                         round_timeout_seconds=min(ROUND_SECONDS, TOTAL_SECONDS - elapsed))
+                         round_timeout_seconds=min(ROUND_SECONDS, TOTAL_SECONDS - elapsed) if time_limited else None)
         languages = round_job['research_round']['query_languages']
         offset = index % len(languages)
         round_job['research_round']['query_languages'] = languages[offset:] + languages[:offset]

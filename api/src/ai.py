@@ -58,7 +58,7 @@ def check_openwebui(connection):
             connection['base_url'] + '/api/models',
             headers={'Authorization': f'Bearer {key}'},
             # This Open WebUI connection runs on the private VPN with a local CA.
-            timeout=10, follow_redirects=False, verify=False,
+            timeout=None, follow_redirects=False, verify=False,
         )
         if response.status_code in {401, 403}:
             raise ValueError('Access denied. Check the API key and permission for /api/models in Open WebUI.')

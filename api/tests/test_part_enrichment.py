@@ -18,6 +18,7 @@ class StructuredTransportTests(unittest.TestCase):
 
     def test_structured_completion_without_research_tools(self):
         def handler(request):
+            self.assertTrue(all(value is None for value in request.extensions['timeout'].values()))
             payload = json.loads(request.content)
             self.assertEqual(request.url.path, '/api/chat/completions')
             self.assertFalse(payload['features']['web_search'])

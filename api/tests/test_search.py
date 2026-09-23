@@ -255,7 +255,7 @@ class ResearchTests(unittest.TestCase):
         self.assertEqual(updated['sources'], [])
         self.assertNotIn('/blocked', updated['result'])
 
-    def test_openwebui_timeout_cancels_only_its_tasks(self):
+    def test_openwebui_manual_cancellation_stops_only_its_tasks(self):
         self.enqueue()
         replies = [httpx.Response(200, json=value) for value in (
             {'features': {'enable_web_search': True}}, {'id': 'owned-chat'},
@@ -265,9 +265,9 @@ class ResearchTests(unittest.TestCase):
             encryption.return_value.decrypt.return_value = b'test-key'
             request = client.return_value.__enter__.return_value.request
             request.side_effect = replies
-            with self.assertRaisesRegex(ValueError, 'round time limit'):
+            with self.assertRaisesRegex(ValueError, 'research cancelled'):
                 run_openwebui(dict(self.job(), model='vision-model'), [],
-                              {'base_url': 'https://example.com', 'api_key': 'encrypted'}, lambda url: None)
+                              {'base_url': 'https://example.com', 'api_key': 'encrypted'}, lambda url: None, is_cancelled=lambda: True)
         self.assertEqual(request.call_args.args, ('POST', 'api/tasks/stop/owned-task'))
 
     def test_sources_reject_unsafe_urls(self):
